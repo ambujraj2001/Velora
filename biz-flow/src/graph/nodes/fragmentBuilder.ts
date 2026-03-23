@@ -1,0 +1,50 @@
+import { GraphState, AnyFragment } from '../../types';
+import { v4 as uuidv4 } from 'uuid';
+
+export async function fragmentBuilderNode(state: GraphState): Promise<Partial<GraphState>> {
+  if (state.error && state.retryCount >= 2) {
+      // Handled in retryNode
+      return {};
+  }
+  
+  const fragments: AnyFragment[] = [];
+  
+  if (state.rows) {
+      if (state.intent === 'DATA_QUERY') {
+         // Generate a heading and summary using LLM for premium feel
+         const { mistral } = require('../../config/llm');
+         const summaryRes = await mistral.invoke([
+             ["system", "You are a data analyst. Based on the user query and the fact that we found data, generate a catchy heading and a 1-2 sentence summary of what you found. Keep it professional and insightful."],
+             ["user", `Query: ${state.userInput}\nData Sample: ${JSON.stringify(state.rows.slice(0, 3))}`]
+         ]);
+
+         const [heading, ...summaryParts] = summaryRes.content.toString().split('\n').filter(Boolean);
+         const summary = summaryParts.join(' ');
+
+         fragments.push({
+             id: uuidv4(),
+             type: 'md',
+             data: { content: `### ${heading || 'Query Results'}\n${summary || 'Here is the data found based on your request.'}` }
+         });
+
+         fragments.push({
+             id: uuidv4(),
+             type: 'table',
+             data: {
+                 columns: Object.keys(state.rows[0] || {}),
+                 rows: state.rows
+             }
+         });
+         
+         fragments.push({
+             id: uuidv4(),
+             type: 'code',
+             data: { language: 'sql', code: state.sql || '' }
+         });
+      } else if (state.intent === 'DASHBOARD') {
+          // Skip duplication - dashboardPlanNode already built the real fragments
+      }
+  }
+
+  return { fragments: [...state.fragments, ...fragments] };
+}
