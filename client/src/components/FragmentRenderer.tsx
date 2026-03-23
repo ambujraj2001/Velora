@@ -217,8 +217,11 @@ export default function FragmentRenderer({ fragment, connectionId }: Props) {
                         <BarChart3 size={15} className="text-[#F06543]" />
                         <span className="text-[10px] font-black uppercase tracking-[0.2em] text-[#666]">Visual Insight Analytics</span>
                     </div>
-                    <div className="p-8 bg-[#0D0D0D]">
-                        <HighchartsReactComp highcharts={Highcharts} options={options} />
+                    <div className="p-8 bg-[#0D0D0D] overflow-x-auto">
+                        <div className="min-w-[400px]">
+                            <HighchartsReactComp highcharts={Highcharts} options={options} />
+
+                        </div>
                     </div>
                 </div>
             );
@@ -249,13 +252,14 @@ export default function FragmentRenderer({ fragment, connectionId }: Props) {
                            </button>
                         )}
                     </div>
-                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 p-8 bg-[#080808]">
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 p-8 bg-[#080808] overflow-x-auto">
                         {dashboardData.fragments.map((subFrag: AnyFragment, idx: number) => (
-                            <div key={idx} className="overflow-hidden rounded-2xl border border-white/5 bg-[#111] shadow-2xl transition-transform duration-300 hover:scale-[1.01]">
+                            <div key={idx} className="overflow-hidden rounded-2xl border border-white/5 bg-[#111] shadow-2xl transition-transform duration-300 hover:scale-[1.01] w-full">
                                 <FragmentRenderer fragment={subFrag} connectionId={connectionId} />
                             </div>
                         ))}
                     </div>
+
                 </div>
             );
         }

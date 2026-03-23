@@ -141,18 +141,18 @@ export default function Conversation() {
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
                   key={msg.id}
-                  className={`flex w-full flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'}`}
+                  className={`flex w-full ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
                 >
-                  <div className="flex max-w-[85%] items-start gap-3">
+                  <div className={`flex max-w-[85%] items-start gap-3 ${msg.role === 'user' ? 'flex-row-reverse' : 'flex-row'}`}>
                     {msg.role === 'assistant' && (
                         <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#222] text-[#F06543] border border-[#333]">
                            <Sparkles size={16} />
                         </div>
                     )}
-                      <div className="flex flex-col gap-2">
+                      <div className={`flex flex-col gap-2 ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
                         {msg.content && (
                           <motion.div
-                            className={`max-w-[85%] rounded-2xl px-5 py-3.5 shadow-lg relative text-[15.5px] leading-relaxed transition-all ${
+                            className={`rounded-2xl px-5 py-3.5 shadow-lg relative text-[15.5px] leading-relaxed transition-all ${
                               msg.role === 'user'
                                 ? 'bg-[#F06543] text-white coral-glow'
                                 : 'bg-[#1A1A1A] text-zinc-100 border border-white/5'
@@ -165,15 +165,15 @@ export default function Conversation() {
                         )}
 
                         {msg.fragments.length > 0 && (
-                          <div className="mt-1 flex w-full flex-col gap-5">
+                          <div className="mt-1 flex w-full flex-col gap-5 max-w-full overflow-hidden">
                             {msg.fragments.map((frag, idx) => (
-                              <div key={idx} className="overflow-hidden rounded-2xl border border-[#222]/50 bg-[#111] shadow-2xl">
+                              <div key={idx} className="overflow-hidden rounded-2xl border border-[#222]/50 bg-[#111] shadow-2xl w-full">
                                 <FragmentRenderer fragment={frag} connectionId={connectionId} />
                               </div>
                             ))}
-
                           </div>
                         )}
+
                     </div>
                   </div>
                 </motion.div>
