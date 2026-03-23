@@ -1,11 +1,4 @@
-export type FragmentType =
-  | 'md'
-  | 'table'
-  | 'chart'
-  | 'list'
-  | 'code'
-  | 'dashboard'
-  | 'error';
+export type FragmentType = 'md' | 'table' | 'chart' | 'list' | 'code' | 'dashboard' | 'error';
 
 export type ConnectionType = 'postgres' | 'clickhouse';
 
@@ -53,7 +46,6 @@ export interface GraphState {
   fragments: AnyFragment[];
   history?: Array<{ role: 'user' | 'assistant'; content: string }>;
   dashboardPlan?: {
-
     title: string;
     charts: Array<{
       type: string;
@@ -72,4 +64,3 @@ export interface GraphState {
     password?: string;
   };
 }
-

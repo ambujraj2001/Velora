@@ -29,7 +29,11 @@ const SESSION_TTL_MS = 1000 * 60 * 60 * 24 * 30;
 const USER_NAMESPACE = 'cbe54cc7-0ac5-4cb3-8e64-6a6b5ac8f9f9';
 
 const base64UrlEncode = (value: string) =>
-  Buffer.from(value, 'utf8').toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
+  Buffer.from(value, 'utf8')
+    .toString('base64')
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/g, '');
 
 const base64UrlDecode = (value: string) => {
   const padded = value.replace(/-/g, '+').replace(/_/g, '/');

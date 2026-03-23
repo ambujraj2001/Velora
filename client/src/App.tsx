@@ -11,7 +11,6 @@ import ChatHistory from './pages/ChatHistory';
 import HelpSupport from './pages/HelpSupport';
 import Placeholder from './pages/Placeholder';
 
-
 import { api } from './lib/appConfig';
 
 function App() {
@@ -45,47 +44,22 @@ function App() {
     <Router>
       <Routes>
         <Route path="/login" element={user ? <Navigate to="/" /> : <Login />} />
-        
+
         {/* Protected Routes */}
-        <Route
-          path="/"
-          element={user ? <Home /> : <Navigate to="/login" />}
-        />
-        <Route
-          path="/c/:id"
-          element={user ? <Conversation /> : <Navigate to="/login" />}
-        />
-        <Route
-          path="/data-sources"
-          element={user ? <DataSources /> : <Navigate to="/login" />}
-        />
+        <Route path="/" element={user ? <Home /> : <Navigate to="/login" />} />
+        <Route path="/c/:id" element={user ? <Conversation /> : <Navigate to="/login" />} />
+        <Route path="/data-sources" element={user ? <DataSources /> : <Navigate to="/login" />} />
         <Route
           path="/data-sources/new"
           element={user ? <NewConnection /> : <Navigate to="/login" />}
         />
-         <Route
-          path="/history"
-          element={user ? <ChatHistory /> : <Navigate to="/login" />}
-        />
+        <Route path="/history" element={user ? <ChatHistory /> : <Navigate to="/login" />} />
 
-        <Route
-          path="/dashboards"
-          element={user ? <Dashboards /> : <Navigate to="/login" />}
-        />
-        <Route
-          path="/data-context"
-          element={user ? <Placeholder /> : <Navigate to="/login" />}
-        />
-        <Route
-          path="/settings"
-          element={user ? <Placeholder /> : <Navigate to="/login" />}
-        />
-        <Route
-          path="/help"
-          element={user ? <HelpSupport /> : <Navigate to="/login" />}
-        />
+        <Route path="/dashboards" element={user ? <Dashboards /> : <Navigate to="/login" />} />
+        <Route path="/data-context" element={user ? <Placeholder /> : <Navigate to="/login" />} />
+        <Route path="/settings" element={user ? <Placeholder /> : <Navigate to="/login" />} />
+        <Route path="/help" element={user ? <HelpSupport /> : <Navigate to="/login" />} />
 
-        
         {/* Fallback to login */}
         <Route path="*" element={<Navigate to="/" />} />
       </Routes>
@@ -94,4 +68,3 @@ function App() {
 }
 
 export default App;
-

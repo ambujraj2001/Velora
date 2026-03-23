@@ -1,18 +1,18 @@
-import { useEffect, useRef, useState } from "react";
-import { useLocation, useParams } from "react-router-dom";
-import { Send, Loader2, Sparkles, User } from "lucide-react";
-import { motion, AnimatePresence } from "framer-motion";
-import axios from "axios";
-import type { AnyFragment } from "../types";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
-import { api } from "../lib/appConfig";
-import Layout from "../components/Layout";
-import FragmentRenderer from "../components/FragmentRenderer";
+import { useEffect, useRef, useState } from 'react';
+import { useLocation, useParams } from 'react-router-dom';
+import { Send, Loader2, Sparkles, User } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import axios from 'axios';
+import type { AnyFragment } from '../types';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import { api } from '../lib/appConfig';
+import Layout from '../components/Layout';
+import FragmentRenderer from '../components/FragmentRenderer';
 
 type Message = {
   id: string;
-  role: "user" | "assistant";
+  role: 'user' | 'assistant';
   content: string;
   fragments: AnyFragment[];
 };
@@ -26,12 +26,11 @@ export default function Conversation() {
   const { id } = useParams<{ id: string }>();
   const location = useLocation();
   const [messages, setMessages] = useState<Message[]>([]);
-  const [input, setInput] = useState("");
+  const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [connectionId, setConnectionId] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const initialFragments = (location.state as LocationState | null)
-    ?.initialFragments;
+  const initialFragments = (location.state as LocationState | null)?.initialFragments;
 
   useEffect(() => {
     const fetchMessages = async () => {
@@ -46,9 +45,7 @@ export default function Conversation() {
             m.connection_id || m.connectionId,
         );
         if (firstWithConn)
-          setConnectionId(
-            firstWithConn.connection_id || firstWithConn.connectionId,
-          );
+          setConnectionId(firstWithConn.connection_id || firstWithConn.connectionId);
 
         const normalized: Message[] = Array.isArray(res.data)
           ? res.data.map(
@@ -62,10 +59,8 @@ export default function Conversation() {
                 idx: number,
               ) => ({
                 id: m.id || `${id}-${idx}`,
-                role: (m.role === "user" ? "user" : "assistant") as
-                  | "user"
-                  | "assistant",
-                content: m.content || "",
+                role: (m.role === 'user' ? 'user' : 'assistant') as 'user' | 'assistant',
+                content: m.content || '',
                 fragments: m.fragments || [],
               }),
             )
@@ -83,7 +78,7 @@ export default function Conversation() {
           if (state?.initialUserMsg) {
             initialMsgs.push({
               id: `${id}-initial-user`,
-              role: "user",
+              role: 'user',
               content: state.initialUserMsg,
               fragments: [],
             });
@@ -92,8 +87,8 @@ export default function Conversation() {
           if (initialFragments?.length) {
             initialMsgs.push({
               id: `${id}-initial-assistant`,
-              role: "assistant",
-              content: "",
+              role: 'assistant',
+              content: '',
               fragments: initialFragments,
             });
           }
@@ -111,26 +106,26 @@ export default function Conversation() {
   }, [id, initialFragments, location]);
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, loading]);
 
   const sendMessage = async () => {
     if (!input.trim() || loading || !id) return;
 
     const userMsg = input;
-    setInput("");
+    setInput('');
     setLoading(true);
 
     const tempMsg: Message = {
       id: `${Date.now()}-user`,
-      role: "user",
+      role: 'user',
       content: userMsg,
       fragments: [],
     };
     setMessages((prev) => [...prev, tempMsg]);
 
     try {
-      const res = await api.post("/chat", {
+      const res = await api.post('/chat', {
         conversationId: id,
         userInput: userMsg,
       });
@@ -141,7 +136,7 @@ export default function Conversation() {
         ...prev,
         {
           id: `${Date.now()}-assistant`,
-          role: "assistant",
+          role: 'assistant',
           content: res.data.content || '',
           fragments: res.data.fragments || [],
         },
@@ -152,10 +147,10 @@ export default function Conversation() {
         ...prev,
         {
           id: `${Date.now()}-error`,
-          role: "assistant",
+          role: 'assistant',
           content: axios.isAxiosError(err)
-            ? err.response?.data?.error || "Failed to connect."
-            : "An error occurred.",
+            ? err.response?.data?.error || 'Failed to connect.'
+            : 'An error occurred.',
           fragments: [],
         },
       ]);
@@ -179,36 +174,34 @@ export default function Conversation() {
                   className="flex w-full flex-col mt-4"
                 >
                   <div
-                    className={`flex w-full gap-4 ${msg.role === "user" ? "flex-row-reverse" : "flex-row"}`}
+                    className={`flex w-full gap-4 ${msg.role === 'user' ? 'flex-row-reverse' : 'flex-row'}`}
                   >
                     {/* Icon section */}
                     <div className="shrink-0 w-9 h-9">
-                      {msg.role === "assistant" ? (
+                      {msg.role === 'assistant' ? (
                         <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#1A1A1A] text-[#F06543] border border-white/5 shadow-xl">
                           <Sparkles size={18} />
                         </div>
                       ) : (
                         <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#F06543]/10 text-[#F06543] border border-[#F06543]/20 shadow-xl">
-                           <User size={18} />
+                          <User size={18} />
                         </div>
                       )}
                     </div>
 
                     {/* Content Section */}
                     <div
-                      className={`flex flex-col gap-2 max-w-[80%] ${msg.role === "user" ? "items-end" : "items-start"}`}
+                      className={`flex flex-col gap-2 max-w-[80%] ${msg.role === 'user' ? 'items-end' : 'items-start'}`}
                     >
                       {msg.content && (
                         <div
                           className={`rounded-2xl px-6 py-4 shadow-2xl relative text-[15px] leading-relaxed border transition-all ${
-                            msg.role === "user"
-                              ? "bg-linear-to-br from-[#F06543] to-[#D45131] border-white/10 text-white shadow-[#F06543]/30"
-                              : "bg-[#121212] border-white/5 text-zinc-100 shadow-black"
+                            msg.role === 'user'
+                              ? 'bg-linear-to-br from-[#F06543] to-[#D45131] border-white/10 text-white shadow-[#F06543]/30'
+                              : 'bg-[#121212] border-white/5 text-zinc-100 shadow-black'
                           }`}
                         >
-                          <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                            {msg.content}
-                          </ReactMarkdown>
+                          <ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.content}</ReactMarkdown>
                         </div>
                       )}
 
@@ -219,10 +212,7 @@ export default function Conversation() {
                               key={idx}
                               className="overflow-hidden rounded-2xl border border-white/5 bg-[#0A0A0A] shadow-2xl w-full"
                             >
-                              <FragmentRenderer
-                                fragment={frag}
-                                connectionId={connectionId}
-                              />
+                              <FragmentRenderer fragment={frag} connectionId={connectionId} />
                             </div>
                           ))}
                         </div>
@@ -266,7 +256,7 @@ export default function Conversation() {
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={(e) => {
-                  if (e.key === "Enter" && !e.shiftKey) {
+                  if (e.key === 'Enter' && !e.shiftKey) {
                     e.preventDefault();
                     sendMessage();
                   }

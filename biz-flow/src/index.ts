@@ -10,10 +10,12 @@ const app = express();
 const port = process.env.PORT || 3001;
 const clientUrl = process.env.CLIENT_URL || 'http://localhost:5173';
 
-app.use(cors({
-   origin: clientUrl,
-   credentials: true,
-}));
+app.use(
+  cors({
+    origin: clientUrl,
+    credentials: true,
+  }),
+);
 app.use(express.json());
 
 // Main Routes
@@ -24,9 +26,9 @@ app.use('/conversations', conversationRoutes);
 app.use('/dashboard', dashboardRoutes);
 
 app.get('/health', (req, res) => {
-   res.status(200).send('OK');
+  res.status(200).send('OK');
 });
 
 app.listen(port, () => {
-   console.log(`Server running on port ${port}`);
+  console.log(`Server running on port ${port}`);
 });

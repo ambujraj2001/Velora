@@ -1,5 +1,11 @@
 import type { Request, Response } from 'express';
-import { clearSessionCookie, exchangeGoogleCode, getGoogleAuthUrl, getSessionUser, setSessionCookie } from '../utils/auth';
+import {
+  clearSessionCookie,
+  exchangeGoogleCode,
+  getGoogleAuthUrl,
+  getSessionUser,
+  setSessionCookie,
+} from '../utils/auth';
 
 export const startGoogleLogin = (_req: Request, res: Response) => {
   res.redirect(getGoogleAuthUrl());

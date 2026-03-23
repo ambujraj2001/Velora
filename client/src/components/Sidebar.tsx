@@ -8,13 +8,10 @@ import {
   HelpCircle,
   MessageSquare,
   LayoutDashboard,
-  LogOut
+  LogOut,
 } from 'lucide-react';
 
-
 import { api } from '../lib/appConfig';
-
-
 
 interface SidebarProps {
   user?: { name: string; email: string; role?: string };
@@ -34,7 +31,7 @@ const Sidebar: React.FC<SidebarProps> = ({ user: initialUser }) => {
             setUser({
               name: userRes.data.user.name || 'User',
               email: userRes.data.user.email,
-              role: userRes.data.user.role || 'Member'
+              role: userRes.data.user.role || 'Member',
             });
           }
         }
@@ -64,38 +61,38 @@ const Sidebar: React.FC<SidebarProps> = ({ user: initialUser }) => {
   const displayName = user?.name || 'User';
   const displayEmail = user?.email || '';
 
-  const tooltipClasses = "absolute left-[72px] ml-2 px-3 py-2 bg-[#1A1A1A] border border-white/10 text-white text-xs font-bold rounded-xl opacity-0 group-hover:opacity-100 pointer-events-none transition-all duration-300 z-[100] whitespace-nowrap shadow-[0_10px_40px_rgba(0,0,0,0.5)] scale-95 group-hover:scale-100 origin-left";
+  const tooltipClasses =
+    'absolute left-[72px] ml-2 px-3 py-2 bg-[#1A1A1A] border border-white/10 text-white text-xs font-bold rounded-xl opacity-0 group-hover:opacity-100 pointer-events-none transition-all duration-300 z-[100] whitespace-nowrap shadow-[0_10px_40px_rgba(0,0,0,0.5)] scale-95 group-hover:scale-100 origin-left';
 
   return (
     <aside className="sidebar flex h-screen w-18 flex-col border-r border-white/5 text-sm text-[#AAAAAA] bg-[#080808] z-60 relative">
-
       {/* Velora Branding */}
       <div className="flex h-20 items-center justify-center shrink-0">
         <div className="group relative flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#F06543] text-white shadow-[0_0_20px_rgba(240,101,67,0.3)] cursor-pointer">
-           <svg
-              width="22"
-              height="22"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="3"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <circle cx="12" cy="12" r="3" />
-              <path d="M12 2v2" />
-              <path d="M12 20v2" />
-              <path d="m4.93 4.93 1.41 1.41" />
-              <path d="m17.66 17.66 1.41 1.41" />
-              <path d="M2 12h2" />
-              <path d="M20 12h2" />
-              <path d="m6.34 17.66-1.41 1.41" />
-              <path d="m19.07 4.93-1.41 1.41" />
-            </svg>
+          <svg
+            width="22"
+            height="22"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="3"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <circle cx="12" cy="12" r="3" />
+            <path d="M12 2v2" />
+            <path d="M12 20v2" />
+            <path d="m4.93 4.93 1.41 1.41" />
+            <path d="m17.66 17.66 1.41 1.41" />
+            <path d="M2 12h2" />
+            <path d="M20 12h2" />
+            <path d="m6.34 17.66-1.41 1.41" />
+            <path d="m19.07 4.93-1.41 1.41" />
+          </svg>
 
-           <div className={tooltipClasses}>
-              velora <span className="text-[#F06543] ml-2 tracking-widest text-[10px]">v1.0</span>
-           </div>
+          <div className={tooltipClasses}>
+            velora <span className="text-[#F06543] ml-2 tracking-widest text-[10px]">v1.0</span>
+          </div>
         </div>
       </div>
 
@@ -116,9 +113,11 @@ const Sidebar: React.FC<SidebarProps> = ({ user: initialUser }) => {
             <li key={item.path} className="w-full flex justify-center">
               <NavLink
                 to={item.path}
-                 className={({ isActive }) =>
+                className={({ isActive }) =>
                   `group relative flex items-center justify-center h-11 w-11 rounded-xl transition-all duration-300 ${
-                    isActive ? 'bg-[#1A1A1A] text-white shadow-inner' : 'hover:bg-[#111] hover:text-[#DDD]'
+                    isActive
+                      ? 'bg-[#1A1A1A] text-white shadow-inner'
+                      : 'hover:bg-[#111] hover:text-[#DDD]'
                   }`
                 }
               >
@@ -133,8 +132,7 @@ const Sidebar: React.FC<SidebarProps> = ({ user: initialUser }) => {
       {/* Footer Navigation */}
       {user && (
         <div className="mt-auto border-t border-white/5 py-5 px-3 flex flex-col items-center gap-4 justify-center shrink-0">
-
-          <button 
+          <button
             onClick={() => navigate('/help')}
             className="group relative flex h-10 w-10 items-center justify-center rounded-xl transition-all duration-300 hover:bg-[#111] hover:text-white"
           >
@@ -154,22 +152,30 @@ const Sidebar: React.FC<SidebarProps> = ({ user: initialUser }) => {
                 </button>
               </div>
             )}
-            
-            <button 
+
+            <button
               onClick={() => setUserMenuOpen(!userMenuOpen)}
               className={`relative flex h-10 w-10 items-center justify-center rounded-xl transition-all duration-300 ${userMenuOpen ? 'bg-[#1A1A1A]' : 'hover:bg-[#111]'}`}
             >
-               <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#FFC2B3] text-[10px] font-black text-[#F06543] shadow-sm">
-                 {displayName.split(' ').map(n => n[0]).join('').toUpperCase()}
-               </div>
-               {!userMenuOpen && (
-                  <div className={tooltipClasses}>
-                    <div className="flex flex-col">
-                      <span className="text-white text-xs font-bold leading-none mb-1">{displayName}</span>
-                      <span className="text-[#666] text-[10px] leading-none font-medium text-opacity-80">{displayEmail}</span>
-                    </div>
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#FFC2B3] text-[10px] font-black text-[#F06543] shadow-sm">
+                {displayName
+                  .split(' ')
+                  .map((n) => n[0])
+                  .join('')
+                  .toUpperCase()}
+              </div>
+              {!userMenuOpen && (
+                <div className={tooltipClasses}>
+                  <div className="flex flex-col">
+                    <span className="text-white text-xs font-bold leading-none mb-1">
+                      {displayName}
+                    </span>
+                    <span className="text-[#666] text-[10px] leading-none font-medium text-opacity-80">
+                      {displayEmail}
+                    </span>
                   </div>
-               )}
+                </div>
+              )}
             </button>
           </div>
         </div>

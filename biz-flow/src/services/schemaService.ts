@@ -8,9 +8,9 @@ export async function fetchSchema(connectionSettings?: any) {
       format: 'JSONEachRow',
     });
     const tables = (await tableResult.json()) as any[];
-    
+
     let schemaContext = '';
-    
+
     for (const table of tables) {
       const tableName = table.name;
       const schemaResult = await client.query({
@@ -18,14 +18,14 @@ export async function fetchSchema(connectionSettings?: any) {
         format: 'JSONEachRow',
       });
       const columns = (await schemaResult.json()) as any[];
-      
+
       schemaContext += `Table: ${tableName}\nColumns:\n`;
-      columns.forEach(col => {
+      columns.forEach((col) => {
         schemaContext += `- ${col.name} (${col.type})\n`;
       });
       schemaContext += '\n';
     }
-    
+
     return schemaContext || 'No tables found in database.';
   } catch (err: any) {
     console.error('Schema fetch error:', err);

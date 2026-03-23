@@ -1,4 +1,4 @@
-@import "tailwindcss";
+@import 'tailwindcss';
 
 @theme {
   --color-brand-50: #fff5f2;
@@ -10,37 +10,37 @@
 }
 
 body {
-    background-color: var(--color-brand-950);
-    color: white;
-    font-family: 'Inter', sans-serif;
+  background-color: var(--color-brand-950);
+  color: white;
+  font-family: 'Inter', sans-serif;
 }
 
 .sidebar {
-    background-color: #141414;
+  background-color: #141414;
 }
 
 .glass-card {
-    background: rgba(20, 20, 20, 0.4);
-    backdrop-filter: blur(12px);
-    border: 1px solid rgba(255, 255, 255, 0.05);
+  background: rgba(20, 20, 20, 0.4);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.05);
 }
 
 .coral-glow {
-    box-shadow: 0 0 25px rgba(240, 101, 67, 0.2);
+  box-shadow: 0 0 25px rgba(240, 101, 67, 0.2);
 }
 
 .scrollbar-hide::-webkit-scrollbar {
-    display: none;
+  display: none;
 }
 .scrollbar-hide {
-    -ms-overflow-style: none;
-    scrollbar-width: none;
+  -ms-overflow-style: none;
+  scrollbar-width: none;
 }
 
 .coral-accent {
-    color: var(--color-brand-500);
+  color: var(--color-brand-500);
 }
 
 .bg-coral {
-    background-color: var(--color-brand-500);
+  background-color: var(--color-brand-500);
 }

@@ -84,14 +84,23 @@ const Login: React.FC = () => {
 
           <p className="mt-6 text-xs leading-relaxed text-[#666]">
             By signing in you agree to our{' '}
-            <a href="/terms" className="underline underline-offset-2 hover:text-[#999]">Terms of Service</a> and{' '}
-            <a href="/privacy" className="underline underline-offset-2 hover:text-[#999]">Privacy Policy</a>.
+            <a href="/terms" className="underline underline-offset-2 hover:text-[#999]">
+              Terms of Service
+            </a>{' '}
+            and{' '}
+            <a href="/privacy" className="underline underline-offset-2 hover:text-[#999]">
+              Privacy Policy
+            </a>
+            .
           </p>
 
           <div className="mt-12 text-sm text-[#888]">
             Need help? Email Us.
             <br />
-            <a href="mailto:support@velora.ai" className="text-[#F06543] underline-offset-4 hover:underline">
+            <a
+              href="mailto:support@velora.ai"
+              className="text-[#F06543] underline-offset-4 hover:underline"
+            >
               support@velora.ai
             </a>
           </div>

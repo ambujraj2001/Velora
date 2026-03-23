@@ -1,14 +1,14 @@
-import { StateGraph, END, START, Annotation } from "@langchain/langgraph";
-import { GraphState, AnyFragment, IntentData } from "../types";
+import { StateGraph, END, START, Annotation } from '@langchain/langgraph';
+import { GraphState, AnyFragment, IntentData } from '../types';
 
-import { intentNode } from "./nodes/intent";
-import { chatNode } from "./nodes/chat";
-import { sqlGenerationNode } from "./nodes/sql";
-import { executeNode } from "./nodes/execute";
-import { retryNode } from "./nodes/retry";
-import { dashboardPlanningNode } from "./nodes/dashboardPlan";
-import { fragmentBuilderNode } from "./nodes/fragmentBuilder";
-import logger from "../lib/logger";
+import { intentNode } from './nodes/intent';
+import { chatNode } from './nodes/chat';
+import { sqlGenerationNode } from './nodes/sql';
+import { executeNode } from './nodes/execute';
+import { retryNode } from './nodes/retry';
+import { dashboardPlanningNode } from './nodes/dashboardPlan';
+import { fragmentBuilderNode } from './nodes/fragmentBuilder';
+import logger from '../lib/logger';
 
 const withLogging = (name: string, node: any) => {
   return async (state: any, config: any) => {
@@ -34,7 +34,7 @@ export const GraphStateAnnotation = Annotation.Root({
   userInput: Annotation<string>(),
   intent: Annotation<IntentData>({
     reducer: (curr, next) => next ?? curr,
-    default: () => "CHAT",
+    default: () => 'CHAT',
   }),
   sql: Annotation<string | undefined>(),
   rows: Annotation<any[] | undefined>(),
@@ -57,53 +57,46 @@ export const GraphStateAnnotation = Annotation.Root({
 
 // Routing logic
 const routeAfterIntent = (state: typeof GraphStateAnnotation.State) => {
-  if (state.intent === "CHAT") return "chatNode";
-  if (state.intent === "DATA_QUERY") return "sqlNode";
-  if (state.intent === "DASHBOARD") return "dashboardPlanNode";
-  return "chatNode";
+  if (state.intent === 'CHAT') return 'chatNode';
+  if (state.intent === 'DATA_QUERY') return 'sqlNode';
+  if (state.intent === 'DASHBOARD') return 'dashboardPlanNode';
+  return 'chatNode';
 };
-
 
 const routeAfterExecution = (state: typeof GraphStateAnnotation.State) => {
   if (state.error) {
     if (state.retryCount >= 2) return END;
-    return "retryNode";
+    return 'retryNode';
   }
-  if (state.intent === "DASHBOARD") return "dashboardPlanNode";
-  return "fragmentBuilderNode";
+  if (state.intent === 'DASHBOARD') return 'dashboardPlanNode';
+  return 'fragmentBuilderNode';
 };
 
 const routeAfterDashboardPlan = (_state: typeof GraphStateAnnotation.State) => {
-  return "fragmentBuilderNode";
+  return 'fragmentBuilderNode';
 };
 
 export const createGraph = () => {
   const builder = new StateGraph(GraphStateAnnotation)
-    .addNode("intentNode", withLogging("intentNode", intentNode))
-    .addNode("chatNode", withLogging("chatNode", chatNode))
-    .addNode("sqlNode", withLogging("sqlNode", sqlGenerationNode))
-    .addNode("executeNode", withLogging("executeNode", executeNode))
-    .addNode("retryNode", withLogging("retryNode", retryNode))
-    .addNode(
-      "dashboardPlanNode",
-      withLogging("dashboardPlanNode", dashboardPlanningNode),
-    )
-    .addNode(
-      "fragmentBuilderNode",
-      withLogging("fragmentBuilderNode", fragmentBuilderNode),
-    )
+    .addNode('intentNode', withLogging('intentNode', intentNode))
+    .addNode('chatNode', withLogging('chatNode', chatNode))
+    .addNode('sqlNode', withLogging('sqlNode', sqlGenerationNode))
+    .addNode('executeNode', withLogging('executeNode', executeNode))
+    .addNode('retryNode', withLogging('retryNode', retryNode))
+    .addNode('dashboardPlanNode', withLogging('dashboardPlanNode', dashboardPlanningNode))
+    .addNode('fragmentBuilderNode', withLogging('fragmentBuilderNode', fragmentBuilderNode))
 
-    .addEdge(START, "intentNode")
+    .addEdge(START, 'intentNode')
 
-    .addConditionalEdges("intentNode", routeAfterIntent)
-    .addEdge("chatNode", END)
-    .addEdge("sqlNode", "executeNode")
+    .addConditionalEdges('intentNode', routeAfterIntent)
+    .addEdge('chatNode', END)
+    .addEdge('sqlNode', 'executeNode')
 
-    .addConditionalEdges("executeNode", routeAfterExecution)
-    .addEdge("retryNode", "sqlNode")
+    .addConditionalEdges('executeNode', routeAfterExecution)
+    .addEdge('retryNode', 'sqlNode')
 
-    .addConditionalEdges("dashboardPlanNode", routeAfterDashboardPlan)
-    .addEdge("fragmentBuilderNode", END);
+    .addConditionalEdges('dashboardPlanNode', routeAfterDashboardPlan)
+    .addEdge('fragmentBuilderNode', END);
 
   return builder.compile();
 };

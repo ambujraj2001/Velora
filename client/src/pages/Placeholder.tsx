@@ -13,7 +13,9 @@ const Placeholder: React.FC = () => {
         <div className="mb-6 rounded-full bg-[#1A1A1A] p-6 text-[#F06543]">
           <Construction size={48} />
         </div>
-        <h2 className="mb-2 text-2xl font-bold capitalize text-white">{pageName || 'Page'} under construction</h2>
+        <h2 className="mb-2 text-2xl font-bold capitalize text-white">
+          {pageName || 'Page'} under construction
+        </h2>
         <p className="max-w-md text-[#666]">
           We're still working on the {pageName} details. Stay tuned for updates!
         </p>

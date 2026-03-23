@@ -8,10 +8,11 @@ export const getClickhouseClient = (settings?: {
   password?: string;
 }) => {
   return createClient({
-    url: settings?.host ? `https://${settings.host}:${settings.port || 8443}` : process.env.CLICKHOUSE_URL,
+    url: settings?.host
+      ? `https://${settings.host}:${settings.port || 8443}`
+      : process.env.CLICKHOUSE_URL,
     username: settings?.username || process.env.CLICKHOUSE_USER || 'default',
     password: settings?.password || process.env.CLICKHOUSE_PASSWORD,
     database: settings?.database || process.env.CLICKHOUSE_DATABASE || 'default',
   });
 };
-

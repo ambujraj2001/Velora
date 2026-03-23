@@ -1,12 +1,12 @@
-import React, { useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { ArrowUp } from "lucide-react";
-import { motion } from "framer-motion";
-import { api } from "../lib/appConfig";
-import Layout from "../components/Layout";
+import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { ArrowUp } from 'lucide-react';
+import { motion } from 'framer-motion';
+import { api } from '../lib/appConfig';
+import Layout from '../components/Layout';
 
 const Home: React.FC = () => {
-  const [input, setInput] = useState("");
+  const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
@@ -16,15 +16,15 @@ const Home: React.FC = () => {
 
     setLoading(true);
     try {
-      const res = await api.post("/chat", {
+      const res = await api.post('/chat', {
         userInput: input,
       });
       const convId = res.data.conversationId;
       if (convId) {
         navigate(`/c/${convId}`, {
-          state: { 
+          state: {
             initialFragments: res.data.fragments,
-            initialUserMsg: input 
+            initialUserMsg: input,
           },
         });
       }
@@ -56,7 +56,7 @@ const Home: React.FC = () => {
                 placeholder="Ask anything..."
                 className="flex-1 resize-none bg-transparent p-4 text-xl outline-none placeholder:text-[#333] selection:bg-[#F06543]/30"
                 onKeyDown={(e) => {
-                  if (e.key === "Enter" && !e.shiftKey) {
+                  if (e.key === 'Enter' && !e.shiftKey) {
                     e.preventDefault();
                     handleSubmit(e);
                   }
@@ -82,20 +82,17 @@ const Home: React.FC = () => {
           </form>
 
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 w-full">
-            {[
-              "Total Revenue Trend",
-              "Top Customers",
-              "Product Sales",
-              "Growth Rate",
-            ].map((suggestion, i) => (
-              <button
-                key={i}
-                onClick={() => setInput(suggestion)}
-                className="rounded-xl border border-[#1A1A1A] bg-[#111] p-3 text-xs text-[#555] hover:bg-[#1A1A1A] hover:text-[#888] transition-colors"
-              >
-                {suggestion}
-              </button>
-            ))}
+            {['Total Revenue Trend', 'Top Customers', 'Product Sales', 'Growth Rate'].map(
+              (suggestion, i) => (
+                <button
+                  key={i}
+                  onClick={() => setInput(suggestion)}
+                  className="rounded-xl border border-[#1A1A1A] bg-[#111] p-3 text-xs text-[#555] hover:bg-[#1A1A1A] hover:text-[#888] transition-colors"
+                >
+                  {suggestion}
+                </button>
+              ),
+            )}
           </div>
         </motion.div>
       </div>

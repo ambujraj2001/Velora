@@ -36,7 +36,8 @@ const NewConnection: React.FC = () => {
       console.error(err);
       const message =
         err && typeof err === 'object' && 'response' in err
-          ? ((err as { response?: { data?: { error?: string } } }).response?.data?.error || 'Failed to save connection.')
+          ? (err as { response?: { data?: { error?: string } } }).response?.data?.error ||
+            'Failed to save connection.'
           : 'Failed to save connection.';
       setMessage(message);
     } finally {
@@ -47,7 +48,7 @@ const NewConnection: React.FC = () => {
   return (
     <Layout>
       <header className="mb-10">
-        <button 
+        <button
           onClick={() => navigate('/data-sources')}
           className="mb-8 flex items-center gap-2 text-sm text-[#666] transition hover:text-[#999]"
         >
@@ -59,8 +60,10 @@ const NewConnection: React.FC = () => {
 
         <div className="flex flex-col gap-1">
           <div className="flex items-center gap-3">
-             <div className="rounded-lg bg-[#FAF0E6] p-2 text-[#F06543] bg-opacity-10"><Database size={24} /></div>
-             <h1 className="text-2xl font-bold text-white">New {source} Connection</h1>
+            <div className="rounded-lg bg-[#FAF0E6] p-2 text-[#F06543] bg-opacity-10">
+              <Database size={24} />
+            </div>
+            <h1 className="text-2xl font-bold text-white">New {source} Connection</h1>
           </div>
           <p className="mt-1 text-[#666]">Create a new connection to your {source} database.</p>
         </div>
@@ -69,20 +72,36 @@ const NewConnection: React.FC = () => {
       {/* Network Access Alert */}
       <div className="mb-10 rounded-xl border border-[#222] bg-[#141414] p-5">
         <div className="flex items-center gap-3">
-            <div className="rounded-full bg-[#1A1A1A] p-2 text-[#444]"><ShieldCheck size={18} /></div>
-            <div className="flex flex-col">
-                <span className="text-sm font-semibold text-white">Network access</span>
-                <p className="text-xs text-[#666]">You may need to whitelist Velora's public IP before testing this connection.</p>
-            </div>
-            <div className="ml-auto flex items-center gap-2 rounded-lg bg-[#222] px-3 py-1.5 text-xs text-white">
-                <span className="font-mono">13.234.4.18</span>
-                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/></svg>
-            </div>
+          <div className="rounded-full bg-[#1A1A1A] p-2 text-[#444]">
+            <ShieldCheck size={18} />
+          </div>
+          <div className="flex flex-col">
+            <span className="text-sm font-semibold text-white">Network access</span>
+            <p className="text-xs text-[#666]">
+              You may need to whitelist Velora's public IP before testing this connection.
+            </p>
+          </div>
+          <div className="ml-auto flex items-center gap-2 rounded-lg bg-[#222] px-3 py-1.5 text-xs text-white">
+            <span className="font-mono">13.234.4.18</span>
+            <svg
+              width="12"
+              height="12"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+            >
+              <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" />
+              <rect x="8" y="2" width="8" height="4" rx="1" ry="1" />
+            </svg>
+          </div>
         </div>
       </div>
 
       <div className="max-w-2xl rounded-2xl border border-[#222] bg-[#141414] p-8 shadow-xl">
-        <h2 className="mb-6 text-sm font-bold uppercase tracking-widest text-[#444]">{source} Connection Details</h2>
+        <h2 className="mb-6 text-sm font-bold uppercase tracking-widest text-[#444]">
+          {source} Connection Details
+        </h2>
 
         <form onSubmit={handleSubmit} className="grid gap-6">
           <div className="grid gap-4 md:grid-cols-2">
@@ -154,14 +173,16 @@ const NewConnection: React.FC = () => {
           </label>
 
           <div className="flex items-center gap-3">
-            <input 
-              type="checkbox" 
-              id="ssl" 
+            <input
+              type="checkbox"
+              id="ssl"
               checked={form.useSsl}
-              onChange={(e) => setForm({...form, useSsl: e.target.checked})}
+              onChange={(e) => setForm({ ...form, useSsl: e.target.checked })}
               className="h-4 w-4 rounded border-[#2A2A2A] bg-[#111] accent-[#F06543]"
             />
-            <label htmlFor="ssl" className="text-sm font-medium text-[#888]">Use SSL</label>
+            <label htmlFor="ssl" className="text-sm font-medium text-[#888]">
+              Use SSL
+            </label>
           </div>
 
           <div className="mt-4 flex items-center gap-3">
@@ -173,16 +194,18 @@ const NewConnection: React.FC = () => {
               {loading ? 'Saving...' : 'Save Connection'}
             </button>
             <button
-               type="button"
-               onClick={() => navigate('/data-sources')}
-               className="rounded-xl bg-[#222] px-8 py-3.5 font-bold text-white transition hover:bg-[#333]"
+              type="button"
+              onClick={() => navigate('/data-sources')}
+              className="rounded-xl bg-[#222] px-8 py-3.5 font-bold text-white transition hover:bg-[#333]"
             >
               Cancel
             </button>
           </div>
 
           {message && (
-            <p className="rounded-lg bg-red-500/10 p-3 text-sm text-red-500 border border-red-500/20">{message}</p>
+            <p className="rounded-lg bg-red-500/10 p-3 text-sm text-red-500 border border-red-500/20">
+              {message}
+            </p>
           )}
         </form>
       </div>
