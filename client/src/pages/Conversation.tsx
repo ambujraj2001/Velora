@@ -141,21 +141,29 @@ export default function Conversation() {
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
                   key={msg.id}
-                  className="flex w-full flex-col"
+                  className="flex w-full flex-col mt-4"
                 >
-                  <div className={`flex w-full gap-4 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                    {msg.role === 'assistant' && (
-                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#222] text-[#F06543] border border-white/5 shadow-2xl">
-                           <Sparkles size={18} />
-                        </div>
-                    )}
+                  <div className={`flex w-full gap-4 ${msg.role === 'user' ? 'flex-row-reverse' : 'flex-row'}`}>
+                    {/* Icon section */}
+                    <div className="flex-shrink-0 w-9 h-9">
+                        {msg.role === 'assistant' ? (
+                            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#1A1A1A] text-[#F06543] border border-white/5 shadow-xl">
+                               <Sparkles size={18} />
+                            </div>
+                        ) : (
+                            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#F06543]/10 text-[#F06543] border border-[#F06543]/20 shadow-xl">
+                               <span className="text-[10px] font-black italic">YOU</span>
+                            </div>
+                        )}
+                    </div>
                     
-                    <div className={`flex flex-col gap-2 max-w-[85%] ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
+                    {/* Content Section */}
+                    <div className={`flex flex-col gap-2 max-w-[80%] ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
                         {msg.content && (
                           <div
                             className={`rounded-2xl px-6 py-4 shadow-2xl relative text-[15px] leading-relaxed border transition-all ${
                               msg.role === 'user'
-                                ? 'bg-[#F06543] border-[#F06543]/50 text-white shadow-[#F06543]/20'
+                                ? 'bg-linear-to-br from-[#F06543] to-[#D45131] border-white/10 text-white shadow-[#F06543]/30'
                                 : 'bg-[#121212] border-white/5 text-zinc-100 shadow-black'
                             }`}
                           >
@@ -165,7 +173,7 @@ export default function Conversation() {
                           </div>
                         )}
 
-                        {msg.fragments.length > 0 && (
+                        {msg.fragments && msg.fragments.length > 0 && (
                           <div className="mt-2 flex w-full flex-col gap-6 w-full max-w-full overflow-visible">
                             {msg.fragments.map((frag, idx) => (
                               <div key={idx} className="overflow-hidden rounded-2xl border border-white/5 bg-[#0A0A0A] shadow-2xl w-full">
@@ -177,6 +185,7 @@ export default function Conversation() {
                     </div>
                   </div>
                 </motion.div>
+
               ))}
             </AnimatePresence>
 
