@@ -22,7 +22,10 @@ const Home: React.FC = () => {
       const convId = res.data.conversationId;
       if (convId) {
         navigate(`/c/${convId}`, {
-          state: { initialFragments: res.data.fragments },
+          state: { 
+            initialFragments: res.data.fragments,
+            initialUserMsg: input 
+          },
         });
       }
     } catch (err) {

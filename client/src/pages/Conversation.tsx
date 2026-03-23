@@ -1,36 +1,37 @@
-import { useEffect, useRef, useState } from 'react';
-import { useLocation, useParams } from 'react-router-dom';
-import { Send, Loader2, Sparkles } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
-import axios from 'axios';
-import type { AnyFragment } from '../types';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
-import { api } from '../lib/appConfig';
-import Layout from '../components/Layout';
-import FragmentRenderer from '../components/FragmentRenderer';
-
+import { useEffect, useRef, useState } from "react";
+import { useLocation, useParams } from "react-router-dom";
+import { Send, Loader2, Sparkles, User } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
+import axios from "axios";
+import type { AnyFragment } from "../types";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+import { api } from "../lib/appConfig";
+import Layout from "../components/Layout";
+import FragmentRenderer from "../components/FragmentRenderer";
 
 type Message = {
   id: string;
-  role: 'user' | 'assistant';
+  role: "user" | "assistant";
   content: string;
   fragments: AnyFragment[];
 };
 
 type LocationState = {
   initialFragments?: AnyFragment[];
+  initialUserMsg?: string;
 };
 
 export default function Conversation() {
   const { id } = useParams<{ id: string }>();
   const location = useLocation();
   const [messages, setMessages] = useState<Message[]>([]);
-  const [input, setInput] = useState('');
+  const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [connectionId, setConnectionId] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const initialFragments = (location.state as LocationState | null)?.initialFragments;
+  const initialFragments = (location.state as LocationState | null)
+    ?.initialFragments;
 
   useEffect(() => {
     const fetchMessages = async () => {
@@ -38,34 +39,68 @@ export default function Conversation() {
 
       try {
         const res = await api.get(`/conversations/${id}/messages`);
-        
-        // Some messages might have the connection context (from Supabase it is snake_case)
-        const firstWithConn = res.data?.find((m: { connection_id?: string; connectionId?: string }) => m.connection_id || m.connectionId);
-        if (firstWithConn) setConnectionId(firstWithConn.connection_id || firstWithConn.connectionId);
 
+        // Some messages might have the connection context (from Supabase it is snake_case)
+        const firstWithConn = res.data?.find(
+          (m: { connection_id?: string; connectionId?: string }) =>
+            m.connection_id || m.connectionId,
+        );
+        if (firstWithConn)
+          setConnectionId(
+            firstWithConn.connection_id || firstWithConn.connectionId,
+          );
 
         const normalized: Message[] = Array.isArray(res.data)
-
-
-          ? res.data.map((m: { id?: string; role?: string; content?: string; fragments?: AnyFragment[] }, idx: number) => ({
-              id: m.id || `${id}-${idx}`,
-              role: (m.role === 'user' ? 'user' : 'assistant') as 'user' | 'assistant',
-              content: m.content || '',
-              fragments: m.fragments || [],
-            }))
+          ? res.data.map(
+              (
+                m: {
+                  id?: string;
+                  role?: string;
+                  content?: string;
+                  fragments?: AnyFragment[];
+                },
+                idx: number,
+              ) => ({
+                id: m.id || `${id}-${idx}`,
+                role: (m.role === "user" ? "user" : "assistant") as
+                  | "user"
+                  | "assistant",
+                content: m.content || "",
+                fragments: m.fragments || [],
+              }),
+            )
           : [];
 
         if (normalized.length > 0) {
           setMessages(normalized);
-        } else if (initialFragments?.length) {
-          setMessages([
-            {
-              id: `${id}-initial`,
-              role: 'assistant',
-              content: '',
+        } else if (
+          initialFragments?.length ||
+          (location.state as LocationState | null)?.initialUserMsg
+        ) {
+          const state = location.state as LocationState | null;
+          const initialMsgs: Message[] = [];
+
+          if (state?.initialUserMsg) {
+            initialMsgs.push({
+              id: `${id}-initial-user`,
+              role: "user",
+              content: state.initialUserMsg,
+              fragments: [],
+            });
+          }
+
+          if (initialFragments?.length) {
+            initialMsgs.push({
+              id: `${id}-initial-assistant`,
+              role: "assistant",
+              content: "",
               fragments: initialFragments,
-            },
-          ]);
+            });
+          }
+
+          if (initialMsgs.length > 0) {
+            setMessages(initialMsgs);
+          }
         }
       } catch (err) {
         console.error(err);
@@ -73,29 +108,29 @@ export default function Conversation() {
     };
 
     fetchMessages();
-  }, [id, initialFragments]);
+  }, [id, initialFragments, location]);
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, loading]);
 
   const sendMessage = async () => {
     if (!input.trim() || loading || !id) return;
 
     const userMsg = input;
-    setInput('');
+    setInput("");
     setLoading(true);
 
     const tempMsg: Message = {
       id: `${Date.now()}-user`,
-      role: 'user',
+      role: "user",
       content: userMsg,
       fragments: [],
     };
     setMessages((prev) => [...prev, tempMsg]);
 
     try {
-      const res = await api.post('/chat', {
+      const res = await api.post("/chat", {
         conversationId: id,
         userInput: userMsg,
       });
@@ -106,20 +141,21 @@ export default function Conversation() {
         ...prev,
         {
           id: `${Date.now()}-assistant`,
-          role: 'assistant',
-          content: '',
+          role: "assistant",
+          content: res.data.content || '',
           fragments: res.data.fragments || [],
         },
       ]);
-
     } catch (err) {
       console.error(err);
       setMessages((prev) => [
         ...prev,
         {
           id: `${Date.now()}-error`,
-          role: 'assistant',
-          content: axios.isAxiosError(err) ? err.response?.data?.error || 'Failed to connect.' : 'An error occurred.',
+          role: "assistant",
+          content: axios.isAxiosError(err)
+            ? err.response?.data?.error || "Failed to connect."
+            : "An error occurred.",
           fragments: [],
         },
       ]);
@@ -131,7 +167,6 @@ export default function Conversation() {
   return (
     <Layout noPadding>
       <div className="flex h-full flex-col">
-
         {/* Messages */}
         <div className="flex-1 overflow-y-auto px-4 py-8 scrollbar-hide">
           <div className="mx-auto max-w-4xl space-y-10">
@@ -143,56 +178,69 @@ export default function Conversation() {
                   key={msg.id}
                   className="flex w-full flex-col mt-4"
                 >
-                  <div className={`flex w-full gap-4 ${msg.role === 'user' ? 'flex-row-reverse' : 'flex-row'}`}>
+                  <div
+                    className={`flex w-full gap-4 ${msg.role === "user" ? "flex-row-reverse" : "flex-row"}`}
+                  >
                     {/* Icon section */}
-                    <div className="flex-shrink-0 w-9 h-9">
-                        {msg.role === 'assistant' ? (
-                            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#1A1A1A] text-[#F06543] border border-white/5 shadow-xl">
-                               <Sparkles size={18} />
-                            </div>
-                        ) : (
-                            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#F06543]/10 text-[#F06543] border border-[#F06543]/20 shadow-xl">
-                               <span className="text-[10px] font-black italic">YOU</span>
-                            </div>
-                        )}
+                    <div className="shrink-0 w-9 h-9">
+                      {msg.role === "assistant" ? (
+                        <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#1A1A1A] text-[#F06543] border border-white/5 shadow-xl">
+                          <Sparkles size={18} />
+                        </div>
+                      ) : (
+                        <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#F06543]/10 text-[#F06543] border border-[#F06543]/20 shadow-xl">
+                           <User size={18} />
+                        </div>
+                      )}
                     </div>
-                    
-                    {/* Content Section */}
-                    <div className={`flex flex-col gap-2 max-w-[80%] ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
-                        {msg.content && (
-                          <div
-                            className={`rounded-2xl px-6 py-4 shadow-2xl relative text-[15px] leading-relaxed border transition-all ${
-                              msg.role === 'user'
-                                ? 'bg-linear-to-br from-[#F06543] to-[#D45131] border-white/10 text-white shadow-[#F06543]/30'
-                                : 'bg-[#121212] border-white/5 text-zinc-100 shadow-black'
-                            }`}
-                          >
-                            <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                              {msg.content}
-                            </ReactMarkdown>
-                          </div>
-                        )}
 
-                        {msg.fragments && msg.fragments.length > 0 && (
-                          <div className="mt-2 flex w-full flex-col gap-6 w-full max-w-full overflow-visible">
-                            {msg.fragments.map((frag, idx) => (
-                              <div key={idx} className="overflow-hidden rounded-2xl border border-white/5 bg-[#0A0A0A] shadow-2xl w-full">
-                                <FragmentRenderer fragment={frag} connectionId={connectionId} />
-                              </div>
-                            ))}
-                          </div>
-                        )}
+                    {/* Content Section */}
+                    <div
+                      className={`flex flex-col gap-2 max-w-[80%] ${msg.role === "user" ? "items-end" : "items-start"}`}
+                    >
+                      {msg.content && (
+                        <div
+                          className={`rounded-2xl px-6 py-4 shadow-2xl relative text-[15px] leading-relaxed border transition-all ${
+                            msg.role === "user"
+                              ? "bg-linear-to-br from-[#F06543] to-[#D45131] border-white/10 text-white shadow-[#F06543]/30"
+                              : "bg-[#121212] border-white/5 text-zinc-100 shadow-black"
+                          }`}
+                        >
+                          <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                            {msg.content}
+                          </ReactMarkdown>
+                        </div>
+                      )}
+
+                      {msg.fragments && msg.fragments.length > 0 && (
+                        <div className="mt-2 flex w-full flex-col gap-6 w-full max-w-full overflow-visible">
+                          {msg.fragments.map((frag, idx) => (
+                            <div
+                              key={idx}
+                              className="overflow-hidden rounded-2xl border border-white/5 bg-[#0A0A0A] shadow-2xl w-full"
+                            >
+                              <FragmentRenderer
+                                fragment={frag}
+                                connectionId={connectionId}
+                              />
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   </div>
                 </motion.div>
-
               ))}
             </AnimatePresence>
 
             {loading && (
-              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex items-start gap-3">
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                className="flex items-start gap-3"
+              >
                 <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#222] text-[#F06543] border border-[#333]">
-                    <Sparkles size={16} className="animate-pulse" />
+                  <Sparkles size={16} className="animate-pulse" />
                 </div>
                 <div className="flex items-center gap-3 rounded-2xl bg-[#141414]/50 px-5 py-3 text-sm text-[#666] border border-[#222]/50">
                   <Loader2 className="h-4 w-4 animate-spin" />
@@ -206,10 +254,11 @@ export default function Conversation() {
 
         {/* Input area */}
         <div className="border-t border-white/5 bg-[#0D0D0D]/80 px-6 py-6 backdrop-blur-xl">
-
-
-          <form 
-            onSubmit={(e) => { e.preventDefault(); sendMessage(); }}
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              sendMessage();
+            }}
             className="mx-auto max-w-4xl"
           >
             <div className="relative flex items-center gap-2 rounded-2xl border border-[#333] bg-[#141414] p-2 pr-3 shadow-2xl focus-within:border-[#F06543]/50 transition-all">
@@ -217,7 +266,7 @@ export default function Conversation() {
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !e.shiftKey) {
+                  if (e.key === "Enter" && !e.shiftKey) {
                     e.preventDefault();
                     sendMessage();
                   }
