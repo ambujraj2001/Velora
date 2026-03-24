@@ -20,6 +20,21 @@ const jsonFormat = winston.format.printf(({ level, message, timestamp, ...metada
   });
 });
 
+const transports: winston.transport[] = [
+  new winston.transports.File({
+    filename: logFile,
+    options: { flags: 'w' },
+  }),
+];
+
+if (process.env.NODE_ENV !== 'production') {
+  transports.push(
+    new winston.transports.Console({
+      format: winston.format.combine(winston.format.colorize(), winston.format.simple()),
+    }),
+  );
+}
+
 const logger = winston.createLogger({
   level: 'info',
   format: winston.format.combine(
@@ -27,15 +42,7 @@ const logger = winston.createLogger({
     winston.format.metadata({ fillExcept: ['message', 'level', 'timestamp'] }),
     jsonFormat,
   ),
-  transports: [
-    new winston.transports.Console({
-      format: winston.format.combine(winston.format.colorize(), winston.format.simple()),
-    }),
-    new winston.transports.File({
-      filename: logFile,
-      options: { flags: 'w' }, // 'w' replaces the file on startup, but we want it per chat?
-    }),
-  ],
+  transports,
 });
 
 // Helper to clear the file manually if needed (e.g. start of a request)
