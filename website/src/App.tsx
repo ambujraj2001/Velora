@@ -2,8 +2,8 @@ import { motion } from 'framer-motion';
 import {
   ArrowRight,
   Bot,
+  ChartColumnBig,
   ChevronRight,
-  Database,
   GitBranch,
   LineChart,
   Lock,
@@ -22,7 +22,7 @@ import {
   metrics,
   navLinks,
   painPoints,
-  solutionPoints,
+  solutionFeatures,
   sqlPreview,
   steps,
 } from './data/content.ts';
@@ -224,82 +224,187 @@ function App() {
 
         <section className="section solution-section" id="solution">
           <div className="solution-copy">
-            <SectionHeading
-              eyebrow="The Velora difference"
-              title="A chat-first interface built for questions, not dashboard maintenance"
-              description="Velora turns intent into queries, results, and shareable dashboards so the whole company can move from curiosity to action in one flow."
-            />
             <motion.div
-              className="solution-list"
+              className="solution-badge"
+              initial={{ opacity: 0, y: 18 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true, amount: 0.3 }}
+              transition={{ duration: 0.5, ease: easeOut }}
+            >
+              <span className="solution-badge-dot">
+                <span />
+              </span>
+              <span>The Velora Difference</span>
+            </motion.div>
+
+            <motion.h2
+              className="solution-title"
+              initial={{ opacity: 0, y: 24 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true, amount: 0.3 }}
+              transition={{ duration: 0.6, ease: easeOut }}
+            >
+              A chat-first interface built for <span>questions</span>, not maintenance.
+            </motion.h2>
+
+            <motion.p
+              className="solution-lead"
+              initial={{ opacity: 0, y: 24 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true, amount: 0.3 }}
+              transition={{ duration: 0.6, ease: easeOut, delay: 0.08 }}
+            >
+              Velora turns intent into queries, results, and shareable dashboards so the whole company can move from curiosity to action in one seamless flow.
+            </motion.p>
+
+            <motion.div
+              className="solution-feature-list"
               variants={sectionReveal}
               initial="hidden"
               whileInView="show"
-              viewport={{ once: true, amount: 0.25 }}
+              viewport={{ once: true, amount: 0.2 }}
             >
-              {solutionPoints.map((point) => (
-                <motion.div className="solution-item" key={point} variants={itemReveal}>
-                  <Sparkles size={18} />
-                  <p>{point}</p>
-                </motion.div>
-              ))}
+              {solutionFeatures.map((feature) => {
+                const Icon = feature.icon;
+
+                return (
+                  <motion.div className="solution-feature-row" key={feature.title} variants={itemReveal}>
+                    <div className="solution-feature-icon">
+                      <Icon size={16} />
+                    </div>
+                    <div>
+                      <h3>{feature.title}</h3>
+                      <p>{feature.description}</p>
+                    </div>
+                  </motion.div>
+                );
+              })}
             </motion.div>
           </div>
 
           <motion.div
-            className="glass-card solution-preview"
-            initial={{ opacity: 0, scale: 0.96 }}
-            whileInView={{ opacity: 1, scale: 1 }}
+            className="solution-mockup-wrap"
+            initial={{ opacity: 0, scale: 0.97, y: 16 }}
+            whileInView={{ opacity: 1, scale: 1, y: 0 }}
             viewport={{ once: true, amount: 0.25 }}
-            transition={{ duration: 0.65, ease: easeOut }}
+            transition={{ duration: 0.7, ease: easeOut }}
           >
-            <div className="preview-sidebar">
-              <div className="preview-pill active">
-                <Bot size={16} />
-                Ask
+            <div className="solution-floating-pill glass-card">
+              <div className="solution-floating-avatar">AI</div>
+              <p>Found 3 trends in revenue growth...</p>
+            </div>
+
+            <div className="glass-card solution-mockup">
+              <div className="solution-mockup-header">
+                <div className="solution-window-dots">
+                  <span />
+                  <span />
+                  <span />
+                </div>
+                <div className="solution-window-label">velora-workspace-v1</div>
               </div>
-              <div className="preview-pill">
-                <Database size={16} />
-                Query
-              </div>
-              <div className="preview-pill">
-                <Table2 size={16} />
-                Visualize
+
+              <div className="solution-mockup-body">
+                <div className="solution-mockup-sidebar">
+                  <div className="solution-side-icon active">
+                    <Bot size={18} />
+                  </div>
+                  <div className="solution-side-icon">
+                    <ChartColumnBig size={18} />
+                  </div>
+                  <div className="solution-side-icon">
+                    <Table2 size={18} />
+                  </div>
+                </div>
+
+                <div className="solution-mockup-main">
+                  <div className="solution-query-pill">
+                    <span>"Show me the weekly revenue for the last 6 months"</span>
+                    <strong>Running Query...</strong>
+                  </div>
+
+                  <div className="solution-chart-card">
+                    <div className="solution-chart-top">
+                      <div>
+                        <h4>Weekly Revenue Watch</h4>
+                        <p>
+                          <span className="solution-live-dot" />
+                          Updated live • SQL optimized
+                        </p>
+                      </div>
+                      <strong>$42,912</strong>
+                    </div>
+
+                    <div className="solution-bars">
+                      {[40, 55, 45, 70, 60, 85].map((height, index) => (
+                        <motion.span
+                          key={index}
+                          style={{ height: `${height}%` }}
+                          animate={{ opacity: [0.45, 1, 0.7] }}
+                          transition={{ duration: 2.8, repeat: Infinity, delay: index * 0.16 }}
+                        />
+                      ))}
+                      <svg className="solution-line" viewBox="0 0 100 100" preserveAspectRatio="none">
+                        <path d="M0 75 C18 58, 28 64, 45 48 S72 35, 100 10" />
+                      </svg>
+                    </div>
+
+                    <div className="solution-months">
+                      {['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'].map((month) => (
+                        <span key={month}>{month}</span>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="solution-sync-note">
+                    <Sparkles size={14} />
+                    <span>Generated SQL, summary text, and widgets stay in sync with the conversation.</span>
+                  </div>
+                </div>
               </div>
             </div>
 
-            <div className="preview-canvas">
-              <div className="preview-window">
-                <header>
-                  <strong>Weekly revenue watch</strong>
-                  <span>Updated live</span>
-                </header>
-                <div className="preview-chart">
-                  {[24, 46, 58, 41, 72, 80, 96].map((dot, index) => (
-                    <motion.span
-                      key={index}
-                      className="chart-dot"
-                      style={{ bottom: `${dot}%`, left: `${index * 15}%` }}
-                      animate={{ scale: [1, 1.18, 1] }}
-                      transition={{ duration: 2.8, repeat: Infinity, delay: index * 0.18 }}
-                    />
-                  ))}
-                  <div className="chart-line" />
-                </div>
-              </div>
-              <div className="preview-note">
-                Generated SQL, summary text, and widgets stay in sync with the conversation.
-              </div>
+            <div className="solution-code-float">
+              <pre>{`SELECT date_trunc('week', created_at),
+       SUM(total_amount)
+FROM orders
+WHERE created_at > now() - interval '6 months'
+GROUP BY 1
+ORDER BY 1;`}</pre>
             </div>
           </motion.div>
         </section>
 
         <section className="section" id="features">
-          <SectionHeading
-            eyebrow="Feature set"
-            title="Everything needed for chat to insight to dashboard"
-            description="Each piece of the product is designed to remove friction while keeping the system transparent for technical teams."
-            align="center"
-          />
+          <div className="features-heading">
+            <motion.div
+              className="features-badge"
+              initial={{ opacity: 0, y: 18 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true, amount: 0.3 }}
+              transition={{ duration: 0.5, ease: easeOut }}
+            >
+              <span>Capabilities</span>
+            </motion.div>
+
+            <motion.h2
+              initial={{ opacity: 0, y: 24 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true, amount: 0.3 }}
+              transition={{ duration: 0.6, ease: easeOut }}
+            >
+              Everything needed for chat to insight to dashboard
+            </motion.h2>
+
+            <motion.p
+              initial={{ opacity: 0, y: 24 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true, amount: 0.3 }}
+              transition={{ duration: 0.6, ease: easeOut, delay: 0.08 }}
+            >
+              A unified platform that handles the complexity of data engineering so your team can focus on answering the next big question.
+            </motion.p>
+          </div>
 
           <motion.div
             className="feature-grid"
@@ -321,6 +426,8 @@ function App() {
               );
             })}
           </motion.div>
+
+          <div className="features-divider" aria-hidden="true" />
         </section>
 
         <section className="section" id="how-it-works">

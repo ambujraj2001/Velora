@@ -42,6 +42,29 @@ export const solutionPoints = [
   'Every useful answer can be turned into a reusable workspace.',
 ];
 
+export const solutionFeatures: Feature[] = [
+  {
+    title: 'Ask in plain English',
+    description: 'No complex syntax. Just describe what you need to know.',
+    icon: MessageSquareText,
+  },
+  {
+    title: 'AI writes and improves SQL automatically',
+    description: 'Self-correcting queries that get smarter with every interaction.',
+    icon: Braces,
+  },
+  {
+    title: 'Results arrive as polished tables and dashboards',
+    description: 'Beautiful, interactive visualizations generated in real time.',
+    icon: ChartColumnBig,
+  },
+  {
+    title: 'Turn any answer into a reusable workspace',
+    description: 'Collaborate with your team instantly on any discovered insight.',
+    icon: LayoutDashboard,
+  },
+];
+
 export const features: Feature[] = [
   {
     title: 'Natural Language Queries',
