@@ -479,7 +479,9 @@ function App() {
                 'Collaborate with non-technical teammates in one shared thread.',
               ].map((point) => (
                 <motion.div className="glass-card developer-card" key={point} variants={itemReveal}>
-                  <ShieldCheck size={18} />
+                  <span className="developer-card-icon" aria-hidden="true">
+                    <ShieldCheck size={16} />
+                  </span>
                   <p>{point}</p>
                 </motion.div>
               ))}
