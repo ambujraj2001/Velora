@@ -104,8 +104,8 @@ export const requireSessionUser = (req: Request, res: Response): SessionUser | n
 
 export const sessionCookieOptions = () => ({
   httpOnly: true,
-  sameSite: 'lax' as const,
-  secure: process.env.NODE_ENV === 'production',
+  sameSite: 'none' as const,
+  secure: true,
   path: '/',
   maxAge: SESSION_TTL_MS,
 });
