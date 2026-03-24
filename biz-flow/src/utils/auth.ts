@@ -84,9 +84,16 @@ export const verifySessionToken = (token?: string): SessionPayload | null => {
 
 export const getSessionUser = (req: Request): SessionUser | null => {
   const cookies = parseCookies(req.headers.cookie);
-  const session = verifySessionToken(cookies[SESSION_COOKIE_NAME]);
-  if (!session) return null;
+  const sessionToken = cookies[SESSION_COOKIE_NAME];
+  console.log('[Auth] Session cookie found:', !!sessionToken);
 
+  const session = verifySessionToken(sessionToken);
+  if (!session) {
+    if (sessionToken) console.log('[Auth] Session token verification FAILED');
+    return null;
+  }
+
+  console.log('[Auth] Session verified for:', session.email);
   return {
     ...session,
     userId: uuidv5(session.sub, USER_NAMESPACE),
