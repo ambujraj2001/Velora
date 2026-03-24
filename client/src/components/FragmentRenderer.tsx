@@ -285,7 +285,7 @@ export default function FragmentRenderer({ fragment, connectionId }: Props) {
             </span>
           </div>
           <div className="p-8 bg-[#0D0D0D] overflow-x-auto">
-            <div className="min-w-[400px]">
+            <div className="min-w-100">
               <HighchartsReactComp highcharts={Highcharts} options={options} />
             </div>
           </div>

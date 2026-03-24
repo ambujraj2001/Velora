@@ -206,7 +206,7 @@ export default function Conversation() {
                       )}
 
                       {msg.fragments && msg.fragments.length > 0 && (
-                        <div className="mt-2 flex w-full flex-col gap-6 w-full max-w-full overflow-visible">
+                        <div className="mt-2 flex w-full flex-col gap-6 max-w-full overflow-visible">
                           {msg.fragments.map((frag, idx) => (
                             <div
                               key={idx}
