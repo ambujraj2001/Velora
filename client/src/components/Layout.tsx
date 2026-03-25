@@ -14,7 +14,7 @@ const Layout: React.FC<LayoutProps> = ({ children, user, noPadding }) => {
       <main
         className={`relative flex-1 bg-[#0D0D0D] overflow-y-auto min-w-0 ${noPadding ? '' : 'p-6 lg:p-10'}`}
       >
-        <div className={`mx-auto h-full flex flex-col w-full ${noPadding ? 'max-w-none' : 'max-w-6xl'}`}>
+        <div className={`mx-auto h-full flex flex-col w-full ${noPadding ? 'max-w-none' : 'max-w-7xl'}`}>
           {children}
         </div>
       </main>

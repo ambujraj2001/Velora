@@ -12,10 +12,62 @@ import {
   Globe,
   Lock,
 } from 'lucide-react';
+import { api } from '../lib/appConfig';
 import Layout from '../components/Layout';
+
+interface Connection {
+  id: string;
+  name: string;
+  type: string;
+  host: string;
+  username: string;
+}
 
 const HelpSupport: React.FC = () => {
   const [copied, setCopied] = React.useState<string | null>(null);
+
+  const [connections, setConnections] = React.useState<Connection[]>([]);
+  const [connecting, setConnecting] = React.useState(false);
+
+  const fetchConnections = async () => {
+    try {
+      const res = await api.get('/connections');
+      setConnections(res.data || []);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  React.useEffect(() => {
+    fetchConnections();
+  }, []);
+
+  const isAlreadyConnected = connections.some(
+    (c: Connection) => c.host === 'vjmzvtxtab.ap-south-1.aws.clickhouse.cloud' && c.username === 'default',
+  );
+
+  const handleQuickConnect = async () => {
+    if (isAlreadyConnected || connecting) return;
+    setConnecting(true);
+    try {
+      await api.post('/connections', {
+        name: 'Sample ClickHouse',
+        type: 'clickhouse',
+        host: 'vjmzvtxtab.ap-south-1.aws.clickhouse.cloud',
+        port: 8443,
+        username: 'default',
+        password: 'quf3_tvWAYU1b',
+        database: 'default',
+        useSsl: true,
+      });
+      await fetchConnections();
+    } catch (err) {
+      console.error('Quick connect failed:', err);
+      alert('Failed to connect. Please check your credentials or network.');
+    } finally {
+      setConnecting(false);
+    }
+  };
 
   const handleCopy = (text: string, id: string) => {
     navigator.clipboard.writeText(text);
@@ -29,7 +81,6 @@ const HelpSupport: React.FC = () => {
     { label: 'Username', value: 'default' },
     { label: 'Password', value: 'quf3_tvWAYU1b' },
     { label: 'Database', value: 'default' },
-    { label: 'SSL', value: 'Enabled (✅ Yes)' },
   ];
 
   const sampleQuestions = [
@@ -111,9 +162,30 @@ const HelpSupport: React.FC = () => {
                       Sample Connection
                     </span>
                   </div>
-                  <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-green-500/10 text-green-500 text-[10px] font-bold uppercase tracking-wider">
-                    <ShieldCheck size={12} />
-                    <span>Verified Safe</span>
+                  <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-green-500/10 text-green-500 text-[10px] font-bold uppercase tracking-wider">
+                      <ShieldCheck size={12} />
+                      <span>Verified Safe</span>
+                    </div>
+                    {isAlreadyConnected ? (
+                      <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 text-[10px] font-bold uppercase tracking-wider shadow-[0_0_15px_rgba(16,185,129,0.1)] anim-in">
+                        <Check size={12} strokeWidth={4} />
+                        <span>Connected</span>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={handleQuickConnect}
+                        disabled={connecting}
+                        className="flex items-center gap-2 px-3 py-1 rounded-full bg-[#F06543] text-white text-[10px] font-bold uppercase tracking-wider hover:bg-[#D45131] transition-all hover:scale-105 active:scale-95 disabled:opacity-50"
+                      >
+                        {connecting ? (
+                          <div className="h-3 w-3 animate-spin rounded-full border-2 border-white/20 border-t-white" />
+                        ) : (
+                          <Zap size={12} fill="currentColor" />
+                        )}
+                        <span>{connecting ? 'Connecting...' : 'Connect Now'}</span>
+                      </button>
+                    )}
                   </div>
                 </div>
                 <h2 className="text-3xl font-black text-white">ClickHouse Cloud Instance</h2>
@@ -124,13 +196,19 @@ const HelpSupport: React.FC = () => {
                   {credentials.map((cred, i) => (
                     <div
                       key={i}
-                      className={`p-6 border-white/5 flex flex-col gap-1 hover:bg-white/2 group transition-colors ${i % 2 === 0 ? 'md:border-r' : ''} ${i < 4 ? 'border-b' : ''}`}
+                      className={`p-6 border-white/5 flex flex-col gap-1 hover:bg-white/2 group transition-colors 
+                        ${i === 0 ? 'md:col-span-2 border-b' : ''} 
+                        ${i > 0 && i % 2 !== 0 ? 'md:border-r' : ''} 
+                        ${i > 0 && i < 5 ? 'border-b' : ''}
+                      `}
                     >
                       <span className="text-[10px] font-black uppercase tracking-widest text-[#444] group-hover:text-[#666] transition-colors">
                         {cred.label}
                       </span>
                       <div className="flex items-center justify-between gap-4">
-                        <code className="text-white font-mono text-sm break-all">{cred.value}</code>
+                        <code className="text-white font-mono text-sm whitespace-nowrap overflow-x-auto pb-1 scrollbar-hide">
+                          {cred.value}
+                        </code>
                         <button
                           onClick={() => handleCopy(cred.value, cred.label)}
                           className="shrink-0 p-2 rounded-lg hover:bg-white/5 text-[#444] hover:text-white transition-all"

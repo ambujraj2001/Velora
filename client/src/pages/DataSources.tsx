@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Database, ChevronRight, Compass, Cloud } from 'lucide-react';
+import { Database, Cloud } from 'lucide-react';
 import { api } from '../lib/appConfig';
 import Layout from '../components/Layout';
 
@@ -48,23 +48,42 @@ const DataSources: React.FC = () => {
         </div>
       </header>
 
-      {/* Network Access Alert (Mocked from Screenshot) */}
-      <div className="mb-8 rounded-xl border border-[#222] bg-[#141414] p-5">
-        <div className="flex items-center gap-3">
-          <div className="rounded-full bg-[#1A1A1A] p-2 text-[#444]">
-            <Compass size={18} />
+      {/* Connection Status Banner */}
+      <div className="mb-10 animate-in fade-in slide-in-from-top-4 duration-700">
+        {connections.length > 0 ? (
+          <div className="flex items-center gap-5 rounded-2xl border border-white/5 bg-[#141414] p-6 shadow-2xl transition-all hover:bg-[#161616]">
+            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-500 shadow-inner">
+              <Database size={24} />
+            </div>
+            <div className="flex flex-col gap-1">
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-bold text-white tracking-tight">
+                  Connected to {connections[0].type} ({connections[0].name})
+                </span>
+                <span className="inline-flex h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+              </div>
+              <p className="text-xs text-[#666] font-medium">Ready to query your data and generate insights.</p>
+            </div>
           </div>
-          <div className="flex flex-col">
-            <span className="text-sm font-semibold text-white">Network access</span>
-            <p className="text-xs text-[#666]">
-              You may need to whitelist Velora's public IP before testing this connection.
-            </p>
+        ) : (
+          <div className="flex flex-col md:flex-row items-center justify-between gap-6 rounded-2xl border border-dashed border-[#222] bg-[#0D0D0D] p-8 transition-all hover:border-[#F06543]/30">
+            <div className="flex items-center gap-5">
+              <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-[#222] text-[#444]">
+                <Cloud size={24} />
+              </div>
+              <div className="flex flex-col gap-1">
+                <span className="text-sm font-bold text-white">No data source connected</span>
+                <p className="text-xs text-[#666]">Connect your database to start analyzing and building dashboards.</p>
+              </div>
+            </div>
+            <button
+              onClick={() => navigate('/data-sources/new?source=ClickHouse')}
+              className="px-6 py-2.5 rounded-xl bg-[#F06543] text-white text-xs font-bold transition-all hover:bg-[#D45131] hover:scale-105 active:scale-95 shadow-lg shadow-[#F06543]/20"
+            >
+              Add Your First Source
+            </button>
           </div>
-          <div className="ml-auto flex items-center gap-2 rounded-lg bg-[#222] px-3 py-1.5 text-xs text-white">
-            <span className="font-mono">13.234.4.18</span>
-            <ChevronRight size={14} />
-          </div>
-        </div>
+        )}
       </div>
 
       <section className="mb-10">
