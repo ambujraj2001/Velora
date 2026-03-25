@@ -68,7 +68,10 @@ const Sidebar: React.FC<SidebarProps> = ({ user: initialUser }) => {
     <aside className="sidebar flex h-screen w-18 flex-col border-r border-white/5 text-sm text-[#AAAAAA] bg-[#080808] z-60 relative">
       {/* Velora Branding */}
       <div className="flex h-20 items-center justify-center shrink-0">
-        <div className="group relative flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#F06543] text-white shadow-[0_0_20px_rgba(240,101,67,0.3)] cursor-pointer">
+        <div 
+          onClick={() => navigate('/')}
+          className="group relative flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#F06543] text-white shadow-[0_0_20px_rgba(240,101,67,0.3)] cursor-pointer"
+        >
           <svg
             width="22"
             height="22"
@@ -91,7 +94,7 @@ const Sidebar: React.FC<SidebarProps> = ({ user: initialUser }) => {
           </svg>
 
           <div className={tooltipClasses}>
-            velora <span className="text-[#F06543] ml-2 tracking-widest text-[10px]">v1.0</span>
+            velora <span className="text-[#F06543] ml-2 tracking-widest text-[10px]">New Chat</span>
           </div>
         </div>
       </div>
