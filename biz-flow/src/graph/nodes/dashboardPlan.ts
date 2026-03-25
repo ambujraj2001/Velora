@@ -71,6 +71,7 @@ Return ONLY the SQL. Limit to 50 rows.`,
             id: uuidv4(),
             type: 'table',
             name: task.title,
+            sql,
             data: {
               columns: Object.keys(rows[0]),
               rows: rows,
@@ -99,6 +100,7 @@ Ensure it's a valid object that highcharts-react-official can consume.`,
             id: uuidv4(),
             type: 'chart',
             name: task.title,
+            sql,
             data: { highchartOptions: JSON.parse(configStr) },
           });
         }
@@ -117,12 +119,23 @@ Ensure it's a valid object that highcharts-react-official can consume.`,
     }
 
     // 3. Assemble Final Dashboard Fragment
+    const titleRes = await mistral.invoke([
+      [
+        'system',
+        'Generate a short, professional, analysis-oriented title for a dashboard based on the user query. Return ONLY the title (max 5 words).',
+      ],
+      ['user', state.userInput],
+    ]);
+    const dashboardTitle = titleRes.content.toString().trim().replace(/^"|"$/g, '');
+
     const finalDashboard: AnyFragment = {
       id: uuidv4(),
       type: 'dashboard',
+      name: dashboardTitle,
       data: {
         layout: 'grid',
         fragments: dashboardFragments,
+        originalPrompt: state.userInput,
       },
     };
 

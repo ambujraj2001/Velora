@@ -19,13 +19,12 @@ export async function chatNode(state: GraphState): Promise<Partial<GraphState>> 
     };
 
     return {
-      fragments: [...state.fragments, fragment],
+      fragments: [fragment],
     };
   } catch (err) {
     console.error(err);
     return {
       fragments: [
-        ...state.fragments,
         { id: uuidv4(), type: 'error', data: { message: 'Failed to process chat query' } },
       ],
     };

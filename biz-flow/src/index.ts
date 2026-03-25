@@ -5,6 +5,7 @@ import connectionRoutes from './routes/connections';
 import conversationRoutes from './routes/conversations';
 import dashboardRoutes from './routes/dashboard';
 import authRoutes from './routes/auth';
+import settingsRoutes from './routes/settings';
 
 const app = express();
 const port = process.env.PORT || 3001;
@@ -23,7 +24,8 @@ app.use('/auth', authRoutes);
 app.use('/chat', chatRoutes);
 app.use('/connections', connectionRoutes);
 app.use('/conversations', conversationRoutes);
-app.use('/dashboard', dashboardRoutes);
+app.use('/dashboards', dashboardRoutes);
+app.use('/settings', settingsRoutes);
 
 app.get('/health', (req, res) => {
   res.status(200).send('OK');

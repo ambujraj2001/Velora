@@ -3,6 +3,7 @@ import crypto from 'crypto';
 import dotenv from 'dotenv';
 import type { ConnectionType } from '../types';
 import { requireSessionUser } from '../utils/auth';
+import { getClickhouseClient } from '../lib/clickhouse';
 dotenv.config();
 
 const ENCRYPTION_KEY = process.env.ENCRYPTION_KEY || '12345678123456781234567812345678'; // 32 bytes
@@ -93,3 +94,82 @@ export const deleteConnection = async (req: any, res: any) => {
     res.status(500).json({ error: err.message });
   }
 };
+
+// Helper: load and decrypt a connection by ID for the authed user
+async function loadConnectionSettings(userId: string, connId: string) {
+  const { data: conn } = await supabase
+    .from('velora_connections')
+    .select('*')
+    .eq('id', connId)
+    .eq('user_id', userId)
+    .single();
+  if (!conn) return null;
+  const { decrypt } = require('../utils/crypto');
+  return {
+    conn,
+    settings: {
+      host: conn.host,
+      port: conn.port,
+      database: conn.database,
+      username: conn.username,
+      password: decrypt(conn.password),
+    },
+  };
+}
+
+export const getConnectionTables = async (req: any, res: any) => {
+  try {
+    const user = requireSessionUser(req, res);
+    if (!user) return;
+
+    const { id } = req.params;
+    const loaded = await loadConnectionSettings(user.userId, id);
+    if (!loaded) return res.status(404).json({ error: 'Connection not found.' });
+
+    const client = getClickhouseClient(loaded.settings);
+    try {
+      const result = await client.query({ query: 'SHOW TABLES', format: 'JSONEachRow' });
+      const rows = (await result.json()) as Array<{ name: string }>;
+      const tables = rows.map((r) => ({
+        name: r.name,
+        database: loaded.conn.database || 'default',
+      }));
+      res.json(tables);
+    } finally {
+      await client.close();
+    }
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+export const getConnectionTableColumns = async (req: any, res: any) => {
+  try {
+    const user = requireSessionUser(req, res);
+    if (!user) return;
+
+    const { id, table } = req.params;
+    const loaded = await loadConnectionSettings(user.userId, id);
+    if (!loaded) return res.status(404).json({ error: 'Connection not found.' });
+
+    const client = getClickhouseClient(loaded.settings);
+    try {
+      const result = await client.query({
+        query: `DESCRIBE TABLE \`${table}\``,
+        format: 'JSONEachRow',
+      });
+      const columns = (await result.json()) as Array<{
+        name: string;
+        type: string;
+        default_type: string;
+        comment: string;
+      }>;
+      res.json(columns);
+    } finally {
+      await client.close();
+    }
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+};
+

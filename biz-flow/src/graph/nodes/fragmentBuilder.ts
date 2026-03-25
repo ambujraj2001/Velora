@@ -54,5 +54,5 @@ export async function fragmentBuilderNode(state: GraphState): Promise<Partial<Gr
     }
   }
 
-  return { fragments: [...state.fragments, ...fragments] };
+  return { fragments: fragments };
 }

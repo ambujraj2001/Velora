@@ -94,15 +94,24 @@ export default function FragmentRenderer({ fragment, connectionId }: Props) {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
 
-  const handleSaveDashboard = async (name: string, fragments: AnyFragment[]) => {
+  const handleSaveDashboard = async (
+    name: string,
+    fragments: AnyFragment[],
+    description?: string,
+  ) => {
     if (!connectionId || saving || saved) return;
     setSaving(true);
     try {
+      const queries = (fragments || [])
+        .filter((f) => !!f.sql)
+        .map((f) => ({ sql: f.sql, name: f.name, type: f.type }));
+
       await api.post('/dashboards/save', {
         connectionId,
         name: name || 'Untitled Dashboard',
+        description: description || null,
         fragments,
-        queries: [], // Can be extracted if needed
+        queries,
       });
       setSaved(true);
     } catch (err) {
@@ -157,11 +166,33 @@ export default function FragmentRenderer({ fragment, connectionId }: Props) {
       const tableData = fragment.data as TableFragment['data'];
       return (
         <div className="w-full">
-          <div className="flex items-center gap-2 px-6 py-4 border-b border-white/5 bg-[#151515]/50">
-            <Database size={15} className="text-[#F06543]" />
-            <span className="text-[10px] font-black uppercase tracking-[0.2em] text-[#666]">
-              Result Dataset
-            </span>
+          <div className="flex items-center justify-between px-6 py-4 border-b border-white/5 bg-[#151515]/50">
+            <div className="flex items-center gap-2">
+              <Database size={15} className="text-[#F06543]" />
+              <span className="text-[10px] font-black uppercase tracking-[0.2em] text-[#666]">
+                {fragment.name || 'Result Dataset'}
+              </span>
+            </div>
+            {connectionId && (
+              <button
+                onClick={() => handleSaveDashboard(fragment.name || 'Table', [fragment])}
+                disabled={saving || saved}
+                className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-widest transition-all ${
+                  saved
+                    ? 'bg-green-500/10 text-green-500 cursor-default'
+                    : 'bg-white/5 hover:bg-[#F06543]/20 text-[#666] hover:text-[#F06543] active:scale-95'
+                }`}
+              >
+                {saved ? (
+                  <Check size={12} />
+                ) : saving ? (
+                  <Loader2 size={12} className="animate-spin" />
+                ) : (
+                  <Bookmark size={12} />
+                )}
+                {saved ? 'Saved!' : saving ? 'Saving...' : 'Save to Library'}
+              </button>
+            )}
           </div>
           <CollapsibleWrapper threshold={10} currentCount={tableData.rows.length} label="Rows">
             <div className="overflow-x-auto bg-[#0A0A0A]">
@@ -263,26 +294,73 @@ export default function FragmentRenderer({ fragment, connectionId }: Props) {
           itemStyle: { color: '#888888', fontWeight: 'bold' },
         },
         credits: { enabled: false },
-        xAxis: {
-          ...((rawOptions.xAxis as Record<string, unknown>) || {}),
-          labels: { style: { color: '#666' } },
-          gridLineWidth: 0,
-          lineWidth: 0,
-        },
-        yAxis: {
-          ...((rawOptions.yAxis as Record<string, unknown>) || {}),
-          labels: { style: { color: '#666' } },
-          gridLineColor: '#222',
-        },
+        xAxis: Array.isArray(rawOptions.xAxis)
+          ? (rawOptions.xAxis as Array<Record<string, unknown>>).map((x) => ({
+              ...x,
+              labels: {
+                ...((x?.labels as Record<string, unknown>) || {}),
+                style: { color: '#666' },
+              },
+              gridLineWidth: 0,
+              lineWidth: 0,
+            }))
+          : {
+              ...(rawOptions.xAxis || {}),
+              labels: {
+                ...((rawOptions.xAxis as Record<string, unknown>)?.labels as Record<string, unknown> || {}),
+                style: { color: '#666' },
+              },
+              gridLineWidth: 0,
+              lineWidth: 0,
+            },
+        yAxis: Array.isArray(rawOptions.yAxis)
+          ? (rawOptions.yAxis as Array<Record<string, unknown>>).map((y) => ({
+              ...y,
+              labels: {
+                ...((y?.labels as Record<string, unknown>) || {}),
+                style: { color: '#666' },
+              },
+              gridLineColor: '#222',
+            }))
+          : {
+              ...(rawOptions.yAxis || {}),
+              labels: {
+                ...((rawOptions.yAxis as Record<string, unknown>)?.labels as Record<string, unknown> || {}),
+                style: { color: '#666' },
+              },
+              gridLineColor: '#222',
+            },
       };
 
       return (
         <div className="w-full">
-          <div className="flex items-center gap-2 px-6 py-4 border-b border-white/5 bg-[#151515]/50">
-            <BarChart3 size={15} className="text-[#F06543]" />
-            <span className="text-[10px] font-black uppercase tracking-[0.2em] text-[#666]">
-              Visual Insight Analytics
-            </span>
+          <div className="flex items-center justify-between px-6 py-4 border-b border-white/5 bg-[#151515]/50">
+            <div className="flex items-center gap-2">
+              <BarChart3 size={15} className="text-[#F06543]" />
+              <span className="text-[10px] font-black uppercase tracking-[0.2em] text-[#666]">
+                {fragment.name || 'Visual Insight Analytics'}
+              </span>
+            </div>
+            {connectionId && (
+              <button
+                onClick={() => handleSaveDashboard(fragment.name || 'Chart', [fragment])}
+                disabled={saving || saved}
+                className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-widest transition-all ${
+                  saved
+                    ? 'bg-green-500/10 text-green-500 cursor-default'
+                    : 'bg-white/5 hover:bg-[#F06543]/20 text-[#666] hover:text-[#F06543] active:scale-95'
+                }`}
+              >
+                {saved ? (
+                  <Check size={12} />
+                ) : saving ? (
+                  <Loader2 size={12} className="animate-spin" />
+                ) : (
+                  <Bookmark size={12} />
+                )}
+                {saved ? 'Saved!' : saving ? 'Saving...' : 'Save to Library'}
+              </button>
+            )}
           </div>
           <div className="p-8 bg-[#0D0D0D] overflow-x-auto">
             <div className="min-w-100">
@@ -301,7 +379,7 @@ export default function FragmentRenderer({ fragment, connectionId }: Props) {
             <div className="flex items-center gap-2">
               <Presentation size={15} className="text-[#F06543]" />
               <span className="text-[10px] font-black uppercase tracking-[0.2em] text-[#888]">
-                Comprehensive Analytics Dashboard
+                {fragment.name || 'Comprehensive Analytics Dashboard'}
               </span>
             </div>
             {connectionId && (
@@ -310,6 +388,7 @@ export default function FragmentRenderer({ fragment, connectionId }: Props) {
                   handleSaveDashboard(
                     (fragment as { name?: string }).name || 'Dashboard',
                     dashboardData.fragments,
+                    dashboardData.originalPrompt,
                   )
                 }
                 disabled={saving || saved}

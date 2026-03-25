@@ -3,7 +3,7 @@ import FragmentRenderer from '../components/FragmentRenderer';
 import type { AnyFragment } from '../types';
 import { api } from '../lib/appConfig';
 import Layout from '../components/Layout';
-import { LayoutDashboard, RefreshCw } from 'lucide-react';
+import { LayoutDashboard, RefreshCw, Trash2, ChevronDown, ChevronRight } from 'lucide-react';
 
 type DashboardRecord = {
   id: string;
@@ -15,33 +15,54 @@ type DashboardRecord = {
 export default function Dashboards() {
   const [dashboards, setDashboards] = useState<DashboardRecord[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState<Record<string, boolean>>({});
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+
+  const toggleExpand = (id: string) => {
+    setExpanded((prev) => ({ ...prev, [id]: !prev[id] }));
+  };
+
+  const fetchDashboards = async () => {
+    try {
+      const res = await api.get('/dashboards');
+      setDashboards(res.data || []);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    const fetchDashboards = async () => {
-      try {
-        const res = await api.get('/dashboard');
-        setDashboards(res.data || []);
-      } catch (err) {
-        console.error(err);
-      } finally {
-        setLoading(false);
-      }
-    };
     fetchDashboards();
   }, []);
 
   const handleRefresh = async (id: string) => {
+    setRefreshing((prev) => ({ ...prev, [id]: true }));
     try {
-      await api.post(`/dashboard/${id}/refresh`);
-      // Re-fetch or update state
+      await api.post(`/dashboards/${id}/refresh`);
+      await fetchDashboards();
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setRefreshing((prev) => ({ ...prev, [id]: false }));
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!window.confirm('Are you sure you want to delete this dashboard?')) return;
+    try {
+      await api.delete(`/dashboards/${id}`);
+      await fetchDashboards();
     } catch (err) {
       console.error(err);
     }
   };
 
   return (
-    <Layout>
-      <header className="mb-10 flex flex-col gap-1">
+    <Layout noPadding>
+      <div className="p-8 lg:p-10">
+        <header className="mb-10 flex flex-col gap-1">
         <div className="flex items-center gap-2 text-sm text-[#666]">
           <LayoutDashboard size={20} />
           <span>Dashboards</span>
@@ -60,36 +81,59 @@ export default function Dashboards() {
           <p>No dashboards saved yet.</p>
         </div>
       ) : (
-        <div className="grid gap-8">
+        <div className="grid gap-6">
           {dashboards.map((db) => (
             <div
               key={db.id}
-              className="rounded-2xl border border-[#222] bg-[#141414] p-8 shadow-xl"
+              className={`rounded-2xl border border-[#222] bg-[#141414] transition-all overflow-hidden ${expanded[db.id] ? 'p-8' : 'p-4 px-6'}`}
             >
-              <div className="mb-8 flex items-center justify-between">
-                <div>
-                  <h3 className="text-xl font-bold text-white">{db.name}</h3>
-                  <p className="mt-1 text-sm text-[#666]">{db.description}</p>
-                </div>
-                <button
-                  onClick={() => handleRefresh(db.id)}
-                  className="flex items-center gap-2 rounded-lg bg-[#222] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#333]"
+              <div className={`flex items-center justify-between ${expanded[db.id] ? 'mb-8' : ''}`}>
+                <div 
+                  className="flex items-center gap-4 cursor-pointer group"
+                  onClick={() => toggleExpand(db.id)}
                 >
-                  <RefreshCw size={14} />
-                  Refresh
-                </button>
-              </div>
-              <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-                {db.fragments.map((frag, idx: number) => (
-                  <div key={idx} className="rounded-xl border border-[#222] bg-[#0D0D0D] p-6">
-                    <FragmentRenderer fragment={frag} />
+                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#222] text-[#F06543] group-hover:bg-[#333] transition-all">
+                    {expanded[db.id] ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
                   </div>
-                ))}
+                  <div>
+                    <h3 className="text-lg font-bold text-white group-hover:text-[#F06543] transition-colors">{db.name}</h3>
+                    {expanded[db.id] && db.description && <p className="mt-1 text-sm text-[#666]">{db.description}</p>}
+                  </div>
+                </div>
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={() => handleRefresh(db.id)}
+                    disabled={refreshing[db.id]}
+                    className="flex h-9 items-center gap-2 rounded-lg bg-[#222] px-4 text-xs font-bold text-white transition hover:bg-[#333] disabled:opacity-50"
+                  >
+                    <RefreshCw size={12} className={refreshing[db.id] ? 'animate-spin' : ''} />
+                    {refreshing[db.id] ? 'Refreshing...' : 'Refresh'}
+                  </button>
+                  <button
+                    onClick={() => handleDelete(db.id)}
+                    className="flex h-9 items-center gap-2 rounded-lg bg-red-500/10 px-4 text-xs font-bold text-red-500 transition hover:bg-red-500/20"
+                    title="Delete Dashboard"
+                  >
+                    <Trash2 size={12} />
+                    Delete
+                  </button>
+                </div>
               </div>
+
+              {expanded[db.id] && (
+                <div className="grid grid-cols-1 gap-6 lg:grid-cols-2 animate-in fade-in slide-in-from-top-2 duration-300">
+                  {db.fragments.map((frag, idx: number) => (
+                    <div key={idx} className="rounded-xl border border-white/5 bg-[#0D0D0D] overflow-hidden">
+                      <FragmentRenderer fragment={frag} />
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           ))}
         </div>
       )}
+      </div>
     </Layout>
   );
 }

@@ -5,6 +5,7 @@ export type BaseFragment<T> = {
   name?: string;
   type: FragmentType;
   data: T;
+  sql?: string;
   meta?: {
     order?: number;
     loading?: boolean;
@@ -21,6 +22,7 @@ export type CodeFragment = BaseFragment<{ language: string; code: string }>;
 export type DashboardFragment = BaseFragment<{
   layout?: string;
   fragments: AnyFragment[];
+  originalPrompt?: string;
 }>;
 export type ErrorFragment = BaseFragment<{ message: string }>;
 

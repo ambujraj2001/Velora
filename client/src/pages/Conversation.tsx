@@ -164,7 +164,7 @@ export default function Conversation() {
       <div className="flex h-full flex-col">
         {/* Messages */}
         <div className="flex-1 overflow-y-auto px-4 py-8 scrollbar-hide">
-          <div className="mx-auto max-w-4xl space-y-10">
+          <div className="w-full space-y-10">
             <AnimatePresence mode="popLayout">
               {messages.map((msg) => (
                 <motion.div
@@ -191,7 +191,7 @@ export default function Conversation() {
 
                     {/* Content Section */}
                     <div
-                      className={`flex flex-col gap-2 max-w-[80%] ${msg.role === 'user' ? 'items-end' : 'items-start'}`}
+                      className={`flex flex-col gap-2 ${msg.role === 'user' ? 'items-end max-w-[80%]' : 'items-start w-full max-w-full'}`}
                     >
                       {msg.content && (
                         <div
@@ -206,7 +206,7 @@ export default function Conversation() {
                       )}
 
                       {msg.fragments && msg.fragments.length > 0 && (
-                        <div className="mt-2 flex w-full flex-col gap-6 max-w-full overflow-visible">
+                        <div className="mt-2 flex w-full flex-col gap-6 max-w-full overflow-x-hidden">
                           {msg.fragments.map((frag, idx) => (
                             <div
                               key={idx}
@@ -249,7 +249,7 @@ export default function Conversation() {
               e.preventDefault();
               sendMessage();
             }}
-            className="mx-auto max-w-4xl"
+            className="w-full"
           >
             <div className="relative flex items-center gap-2 rounded-2xl border border-[#333] bg-[#141414] p-2 pr-3 shadow-2xl focus-within:border-[#F06543]/50 transition-all">
               <textarea

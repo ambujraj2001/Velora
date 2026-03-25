@@ -9,7 +9,10 @@ import DataSources from './pages/DataSources';
 import NewConnection from './pages/NewConnection';
 import ChatHistory from './pages/ChatHistory';
 import HelpSupport from './pages/HelpSupport';
-import Placeholder from './pages/Placeholder';
+import DataContext from './pages/DataContext';
+import DataContextConnection from './pages/DataContextConnection';
+import DataContextTable from './pages/DataContextTable';
+import Settings from './pages/Settings';
 
 import { api } from './lib/appConfig';
 
@@ -56,8 +59,10 @@ function App() {
         <Route path="/history" element={user ? <ChatHistory /> : <Navigate to="/login" />} />
 
         <Route path="/dashboards" element={user ? <Dashboards /> : <Navigate to="/login" />} />
-        <Route path="/data-context" element={user ? <Placeholder /> : <Navigate to="/login" />} />
-        <Route path="/settings" element={user ? <Placeholder /> : <Navigate to="/login" />} />
+        <Route path="/data-context" element={user ? <DataContext /> : <Navigate to="/login" />} />
+        <Route path="/data-context/:connId" element={user ? <DataContextConnection /> : <Navigate to="/login" />} />
+        <Route path="/data-context/:connId/tables/:tableName" element={user ? <DataContextTable /> : <Navigate to="/login" />} />
+        <Route path="/settings" element={user ? <Settings /> : <Navigate to="/login" />} />
         <Route path="/help" element={user ? <HelpSupport /> : <Navigate to="/login" />} />
 
         {/* Fallback to login */}
