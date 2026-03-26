@@ -13,6 +13,7 @@
   "license": "ISC",
   "description": "",
   "dependencies": {
+    "@axiomhq/js": "^1.5.0",
     "@clickhouse/client": "^1.18.2",
     "@langchain/core": "^1.1.35",
     "@langchain/langgraph": "^1.2.5",

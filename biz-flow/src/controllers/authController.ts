@@ -16,6 +16,7 @@ export const startGoogleLogin = (_req: Request, res: Response) => {
 };
 
 export const handleGoogleCallback = async (req: Request, res: Response) => {
+  const { logger } = req.context;
   try {
     const code = typeof req.query.code === 'string' ? req.query.code : '';
     if (!code) {
@@ -24,8 +25,9 @@ export const handleGoogleCallback = async (req: Request, res: Response) => {
 
     const { profile, sessionToken } = await exchangeGoogleCode(code);
 
-    // Upsert user into velora_users
     const userId = uuidv5(profile.sub, USER_NAMESPACE);
+    logger.info('auth_google_callback', { userId, email: profile.email });
+
     await supabase.from('velora_users').upsert(
       {
         id: userId,
@@ -39,7 +41,7 @@ export const handleGoogleCallback = async (req: Request, res: Response) => {
     setSessionCookie(res, sessionToken);
     res.redirect(process.env.APP_URL || 'http://localhost:5173');
   } catch (err: any) {
-    console.error(err);
+    logger.error('auth_google_callback_error', { error: err.message });
     res.status(500).send(err?.message || 'Google login failed.');
   }
 };

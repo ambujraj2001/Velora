@@ -65,4 +65,6 @@ export interface GraphState {
     username?: string;
     password?: string;
   };
+  traceId?: string;
+  requestId?: string;
 }

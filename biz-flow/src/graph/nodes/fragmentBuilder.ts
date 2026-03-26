@@ -1,9 +1,14 @@
 import { GraphState, AnyFragment } from '../../types';
 import { v4 as uuidv4 } from 'uuid';
+import { createLogger } from '../../lib/logger';
 
 export async function fragmentBuilderNode(state: GraphState): Promise<Partial<GraphState>> {
+  const logger = createLogger({
+    requestId: state.requestId || 'unknown',
+    traceId: state.traceId,
+  });
+
   if (state.error && state.retryCount >= 2) {
-    // Handled in retryNode
     return {};
   }
 
@@ -11,7 +16,8 @@ export async function fragmentBuilderNode(state: GraphState): Promise<Partial<Gr
 
   if (state.rows) {
     if (state.intent === 'DATA_QUERY') {
-      // Generate a heading and summary using LLM for premium feel
+      logger.info('tool_call', { tool: 'fragment_builder', intent: 'DATA_QUERY' });
+
       const { mistral } = require('../../config/llm');
       const summaryRes = await mistral.invoke([
         [
@@ -49,8 +55,10 @@ export async function fragmentBuilderNode(state: GraphState): Promise<Partial<Gr
         type: 'code',
         data: { language: 'sql', code: state.sql || '' },
       });
+
+      logger.info('tool_result', { tool: 'fragment_builder', fragmentCount: fragments.length });
     } else if (state.intent === 'DASHBOARD') {
-      // Skip duplication - dashboardPlanNode already built the real fragments
+      // dashboardPlanNode already built the real fragments
     }
   }
 

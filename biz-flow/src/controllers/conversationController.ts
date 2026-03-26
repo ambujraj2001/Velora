@@ -2,6 +2,7 @@ import { supabase } from '../config/db';
 import { requireSessionUser } from '../utils/auth';
 
 export const getConversations = async (req: any, res: any) => {
+  const { logger } = req.context;
   try {
     const user = requireSessionUser(req, res);
     if (!user) return;
@@ -14,11 +15,13 @@ export const getConversations = async (req: any, res: any) => {
     if (error) throw error;
     res.json(data);
   } catch (err: any) {
+    logger.error('conversations_list_error', { error: err.message });
     res.status(500).json({ error: err.message });
   }
 };
 
 export const getMessages = async (req: any, res: any) => {
+  const { logger } = req.context;
   try {
     const user = requireSessionUser(req, res);
     if (!user) return;
@@ -42,15 +45,20 @@ export const getMessages = async (req: any, res: any) => {
     if (error) throw error;
     res.json(data);
   } catch (err: any) {
+    logger.error('messages_fetch_error', { error: err.message });
     res.status(500).json({ error: err.message });
   }
 };
+
 export const deleteConversation = async (req: any, res: any) => {
+  const { logger } = req.context;
   try {
     const user = requireSessionUser(req, res);
     if (!user) return;
 
     const { conversationId } = req.params;
+    logger.info('conversation_deleting', { conversationId });
+
     const { error } = await supabase
       .from('velora_conversations')
       .delete()
@@ -59,6 +67,7 @@ export const deleteConversation = async (req: any, res: any) => {
     if (error) throw error;
     res.json({ success: true });
   } catch (err: any) {
+    logger.error('conversation_delete_error', { error: err.message });
     res.status(500).json({ error: err.message });
   }
 };

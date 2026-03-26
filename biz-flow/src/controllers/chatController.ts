@@ -2,19 +2,18 @@ import { createGraph } from '../graph';
 import { supabase } from '../config/db';
 import { GraphState } from '../types';
 import { requireSessionUser } from '../utils/auth';
-import logger, { clearLogs } from '../lib/logger';
 
 export const handleChat = async (req: any, res: any) => {
+  const { logger, traceId, requestId } = req.context;
+
   try {
-    clearLogs();
-    logger.info('--- New Chat Request ---', { body: req.body });
+    logger.info('chat_request', { body: req.body });
 
     const user = requireSessionUser(req, res);
     if (!user) return;
 
     const { userInput, conversationId, connectionId } = req.body;
 
-    // --- Dynamic Connection Fetching ---
     let connSettings = undefined;
     let finalConnId = connectionId;
 
@@ -38,19 +37,18 @@ export const handleChat = async (req: any, res: any) => {
           username: conn.username,
           password: decrypt(conn.password),
         };
-        logger.info('Using dynamic connection', { connId: finalConnId, type: conn.type });
-      } catch (decErr) {
-        logger.error('Failed to decrypt connection password', { error: decErr });
+        logger.info('connection_resolved', { connId: finalConnId, type: conn.type });
+      } catch (decErr: any) {
+        logger.error('connection_decrypt_failed', { error: decErr.message });
       }
     } else {
-      logger.warn('No connection found for user, falling back to defaults');
+      logger.warn('connection_not_found', { userId: user.userId });
     }
 
     const { fetchSchema } = require('../services/schemaService');
     const schemaContext = await fetchSchema(connSettings);
-    logger.info('Fetched dynamic schema', { schemaLength: schemaContext.length });
+    logger.info('schema_fetched', { schemaLength: schemaContext.length });
 
-    // Fetch history if conversationId exists
     let history: any[] = [];
     if (conversationId) {
       const { data: msgs } = await supabase
@@ -78,31 +76,31 @@ export const handleChat = async (req: any, res: any) => {
       conversationId,
       schemaContext,
       history,
+      traceId,
+      requestId,
     } satisfies GraphState;
 
     const result = await builder.invoke(initialState);
-    logger.info('Graph execution result', { resultKeys: Object.keys(result || {}) });
+    logger.info('graph_complete', { resultKeys: Object.keys(result || {}) });
 
-    // Save to Supabase
     let convId = conversationId;
     if (!convId) {
-      logger.info('Creating new conversation in Supabase', { userId: user.userId });
+      logger.info('conversation_creating', { userId: user.userId });
       const { data: conv, error: convError } = await supabase
         .from('velora_conversations')
         .insert({
           user_id: user.userId,
-          title: userInput.substring(0, 50) + '...', // Default
+          title: userInput.substring(0, 50) + '...',
         })
         .select()
         .single();
 
       if (convError) {
-        logger.error('Supabase conversation creation error', { error: convError });
+        logger.error('conversation_create_failed', { error: convError });
       }
       if (conv) {
         convId = conv.id;
 
-        // AI Title generation
         const { mistral } = require('../config/llm');
         mistral
           .invoke([
@@ -118,12 +116,12 @@ export const handleChat = async (req: any, res: any) => {
               .update({ title: res.content.toString() })
               .eq('id', convId);
           })
-          .catch((e: any) => logger.error('Title gen failed', { e }));
+          .catch((e: any) => logger.error('title_generation_failed', { error: e.message }));
       }
     }
 
     if (convId) {
-      logger.info('Inserting messages into Supabase', { convId });
+      logger.info('messages_inserting', { convId });
       const { error: msgError } = await supabase.from('velora_messages').insert([
         {
           conversation_id: convId,
@@ -134,27 +132,27 @@ export const handleChat = async (req: any, res: any) => {
         {
           conversation_id: convId,
           role: 'assistant',
-          content: '', // No hardcoded text
+          content: '',
           fragments: result.fragments || [],
           sql: result.sql,
           connection_id: finalConnId,
         },
       ]);
       if (msgError) {
-        logger.error('Supabase message insertion error', { error: msgError });
+        logger.error('messages_insert_failed', { error: msgError });
       }
     } else {
-      logger.warn('No convId obtained, skipping message insertion');
+      logger.warn('messages_skipped_no_conversation');
     }
 
-    logger.info('Chat response payload', { convId, fragmentsCount: result.fragments?.length });
+    logger.info('chat_response', { convId, fragmentsCount: result.fragments?.length });
     res.status(200).json({
       conversationId: convId,
       connectionId: finalConnId,
       fragments: result.fragments || [],
     });
   } catch (err: any) {
-    logger.error('Chat controller error', { error: err.message, stack: err.stack });
+    logger.error('chat_controller_error', { error: err.message, stack: err.stack });
     res.status(500).json({ error: err.message });
   }
 };

@@ -1,25 +1,14 @@
 import { supabase } from '../config/db';
 import { requireSessionUser } from '../utils/auth';
 
-// -----------------------------
-// Helpers
-// -----------------------------
-
 const getUserOrReturn = (req: any, res: any) => {
   const user = requireSessionUser(req, res);
   if (!user) return null;
   return user;
 };
 
-const handleError = (res: any, err: any) => {
-  res.status(500).json({ error: err.message });
-};
-
-// -----------------------------
-// Create Dashboard
-// -----------------------------
-
 export const saveDashboard = async (req: any, res: any) => {
+  const { logger } = req.context;
   try {
     const user = getUserOrReturn(req, res);
     if (!user) return;
@@ -31,6 +20,8 @@ export const saveDashboard = async (req: any, res: any) => {
       fragments,
       queries,
     } = req.body;
+
+    logger.info('dashboard_saving', { name });
 
     const { data, error } = await supabase
       .from('velora_dashboards')
@@ -49,15 +40,13 @@ export const saveDashboard = async (req: any, res: any) => {
 
     res.json(data);
   } catch (err: any) {
-    handleError(res, err);
+    logger.error('dashboard_save_error', { error: err.message });
+    res.status(500).json({ error: err.message });
   }
 };
 
-// -----------------------------
-// Get All Dashboards
-// -----------------------------
-
 export const getDashboards = async (req: any, res: any) => {
+  const { logger } = req.context;
   try {
     const user = getUserOrReturn(req, res);
     if (!user) return;
@@ -72,15 +61,13 @@ export const getDashboards = async (req: any, res: any) => {
 
     res.json(data);
   } catch (err: any) {
-    handleError(res, err);
+    logger.error('dashboards_list_error', { error: err.message });
+    res.status(500).json({ error: err.message });
   }
 };
 
-// -----------------------------
-// Get Dashboard By ID
-// -----------------------------
-
 export const getDashboardById = async (req: any, res: any) => {
+  const { logger } = req.context;
   try {
     const user = getUserOrReturn(req, res);
     if (!user) return;
@@ -98,22 +85,20 @@ export const getDashboardById = async (req: any, res: any) => {
 
     res.json(data);
   } catch (err: any) {
-    handleError(res, err);
+    logger.error('dashboard_fetch_error', { error: err.message });
+    res.status(500).json({ error: err.message });
   }
 };
 
-// -----------------------------
-// Refresh Dashboard
-// -----------------------------
-
 export const refreshDashboard = async (req: any, res: any) => {
+  const { logger } = req.context;
   try {
     const user = getUserOrReturn(req, res);
     if (!user) return;
 
     const { id } = req.params;
+    logger.info('dashboard_refreshing', { dashboardId: id });
 
-    // 1. Load dashboard
     const { data: dashboard } = await supabase
       .from('velora_dashboards')
       .select('*')
@@ -127,7 +112,6 @@ export const refreshDashboard = async (req: any, res: any) => {
       return res.json(dashboard);
     }
 
-    // 2. Load connection
     const { data: connection } = await supabase
       .from('velora_connections')
       .select('*')
@@ -136,13 +120,11 @@ export const refreshDashboard = async (req: any, res: any) => {
 
     if (!connection) throw new Error('Connection not found');
 
-    // 3. Lazy imports (kept same)
     const { decrypt } = require('../utils/crypto');
     const { getClickhouseClient } = require('../lib/clickhouse');
     const { mistral } = require('../config/llm');
     const { v4: uuidv4 } = require('uuid');
 
-    // 4. Create DB client
     const client = getClickhouseClient({
       host: connection.host,
       port: connection.port,
@@ -155,7 +137,8 @@ export const refreshDashboard = async (req: any, res: any) => {
 
     try {
       for (const query of dashboard.queries) {
-        // Execute SQL
+        logger.info('db_query', { tool: 'clickhouse', dashboardId: id, queryName: query.name });
+
         const resultSet = await client.query({
           query: query.sql,
           format: 'JSONEachRow',
@@ -163,20 +146,19 @@ export const refreshDashboard = async (req: any, res: any) => {
 
         const rows = (await resultSet.json()) as any[];
 
+        logger.info('db_query_result', { queryName: query.name, rowCount: rows.length });
+
         if (rows.length === 0) continue;
 
-        // Decide chart vs table
         const isChart =
           query.type === 'chart' ||
           (rows.length > 0 && rows.length <= 30);
 
         if (isChart) {
-          // Build context
           const contextPrompt = dashboard.description
             ? `Context: Original intent was "${dashboard.description}".`
             : '';
 
-          // Generate chart config via LLM
           const chartResponse = await mistral.invoke([
             [
               'system',
@@ -208,7 +190,6 @@ Ensure it's a valid object that highcharts-react-official can consume.`,
             },
           });
         } else {
-          // Table fallback
           newFragments.push({
             id: uuidv4(),
             type: 'table',
@@ -225,12 +206,10 @@ Ensure it's a valid object that highcharts-react-official can consume.`,
       await client.close();
     }
 
-    // If nothing generated, return original
     if (newFragments.length === 0) {
       return res.json(dashboard);
     }
 
-    // 5. Update dashboard
     const { data, error } = await supabase
       .from('velora_dashboards')
       .update({
@@ -243,22 +222,22 @@ Ensure it's a valid object that highcharts-react-official can consume.`,
 
     if (error) throw error;
 
+    logger.info('dashboard_refreshed', { dashboardId: id, fragmentCount: newFragments.length });
     res.json(data);
   } catch (err: any) {
-    handleError(res, err);
+    logger.error('dashboard_refresh_error', { error: err.message });
+    res.status(500).json({ error: err.message });
   }
 };
 
-// -----------------------------
-// Delete Dashboard
-// -----------------------------
-
 export const deleteDashboard = async (req: any, res: any) => {
+  const { logger } = req.context;
   try {
     const user = getUserOrReturn(req, res);
     if (!user) return;
 
     const { id } = req.params;
+    logger.info('dashboard_deleting', { dashboardId: id });
 
     const { error } = await supabase
       .from('velora_dashboards')
@@ -270,6 +249,7 @@ export const deleteDashboard = async (req: any, res: any) => {
 
     res.json({ success: true });
   } catch (err: any) {
-    handleError(res, err);
+    logger.error('dashboard_delete_error', { error: err.message });
+    res.status(500).json({ error: err.message });
   }
 };

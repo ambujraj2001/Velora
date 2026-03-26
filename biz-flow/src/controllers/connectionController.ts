@@ -19,6 +19,7 @@ function encrypt(text: string) {
 }
 
 export const addConnection = async (req: any, res: any) => {
+  const { logger } = req.context;
   try {
     const user = requireSessionUser(req, res);
     if (!user) return;
@@ -30,8 +31,9 @@ export const addConnection = async (req: any, res: any) => {
         error: `Unsupported connection type. Use one of: ${CONNECTION_TYPES.join(', ')}`,
       });
     }
-    // 1. Encrypt password
     const encPassword = encrypt(password);
+
+    logger.info('connection_creating', { name, type: normalizedType });
 
     const { data, error } = await supabase
       .from('velora_connections')
@@ -50,15 +52,16 @@ export const addConnection = async (req: any, res: any) => {
 
     if (error) throw error;
 
-    // Return without password
     const { password: _, ...rest } = data;
     res.json(rest);
   } catch (err: any) {
+    logger.error('connection_create_error', { error: err.message });
     res.status(500).json({ error: err.message });
   }
 };
 
 export const getConnections = async (req: any, res: any) => {
+  const { logger } = req.context;
   try {
     const user = requireSessionUser(req, res);
     if (!user) return;
@@ -72,16 +75,20 @@ export const getConnections = async (req: any, res: any) => {
     if (error) throw error;
     res.json(data);
   } catch (err: any) {
+    logger.error('connections_list_error', { error: err.message });
     res.status(500).json({ error: err.message });
   }
 };
 
 export const deleteConnection = async (req: any, res: any) => {
+  const { logger } = req.context;
   try {
     const user = requireSessionUser(req, res);
     if (!user) return;
 
     const { id } = req.params;
+    logger.info('connection_deleting', { connectionId: id });
+
     const { error } = await supabase
       .from('velora_connections')
       .delete()
@@ -91,6 +98,7 @@ export const deleteConnection = async (req: any, res: any) => {
     if (error) throw error;
     res.json({ success: true });
   } catch (err: any) {
+    logger.error('connection_delete_error', { error: err.message });
     res.status(500).json({ error: err.message });
   }
 };
@@ -118,6 +126,7 @@ async function loadConnectionSettings(userId: string, connId: string) {
 }
 
 export const getConnectionTables = async (req: any, res: any) => {
+  const { logger } = req.context;
   try {
     const user = requireSessionUser(req, res);
     if (!user) return;
@@ -125,6 +134,8 @@ export const getConnectionTables = async (req: any, res: any) => {
     const { id } = req.params;
     const loaded = await loadConnectionSettings(user.userId, id);
     if (!loaded) return res.status(404).json({ error: 'Connection not found.' });
+
+    logger.info('db_query', { tool: 'clickhouse', query: 'SHOW TABLES', connectionId: id });
 
     const client = getClickhouseClient(loaded.settings);
     try {
@@ -139,11 +150,13 @@ export const getConnectionTables = async (req: any, res: any) => {
       await client.close();
     }
   } catch (err: any) {
+    logger.error('connection_tables_error', { error: err.message });
     res.status(500).json({ error: err.message });
   }
 };
 
 export const getConnectionTableColumns = async (req: any, res: any) => {
+  const { logger } = req.context;
   try {
     const user = requireSessionUser(req, res);
     if (!user) return;
@@ -151,6 +164,8 @@ export const getConnectionTableColumns = async (req: any, res: any) => {
     const { id, table } = req.params;
     const loaded = await loadConnectionSettings(user.userId, id);
     if (!loaded) return res.status(404).json({ error: 'Connection not found.' });
+
+    logger.info('db_query', { tool: 'clickhouse', query: 'DESCRIBE TABLE', table, connectionId: id });
 
     const client = getClickhouseClient(loaded.settings);
     try {
@@ -169,6 +184,7 @@ export const getConnectionTableColumns = async (req: any, res: any) => {
       await client.close();
     }
   } catch (err: any) {
+    logger.error('connection_columns_error', { error: err.message, table: req.params.table });
     res.status(500).json({ error: err.message });
   }
 };

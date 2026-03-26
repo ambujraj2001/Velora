@@ -1,9 +1,17 @@
 import { GraphState } from '../../types';
 import { mistral } from '../../config/llm';
+import { createLogger } from '../../lib/logger';
 
 export async function sqlGenerationNode(state: GraphState): Promise<Partial<GraphState>> {
+  const logger = createLogger({
+    requestId: state.requestId || 'unknown',
+    traceId: state.traceId,
+  });
+
   try {
     const historyText = state.history?.map((h) => `${h.role}: ${h.content}`).join('\n') || '';
+
+    logger.info('tool_call', { tool: 'sql_generator' });
 
     const response = await mistral.invoke([
       [
@@ -23,7 +31,6 @@ ${state.schemaContext}`,
     ]);
 
     let sql = response.content.toString().trim();
-    // basic cleanup
     if (sql.startsWith('```sql')) {
       sql = sql.replace('```sql', '');
     }
@@ -34,7 +41,6 @@ ${state.schemaContext}`,
       sql = sql.slice(0, sql.lastIndexOf('```'));
     }
 
-    // Safety check
     const upperSql = sql.toUpperCase();
     if (
       upperSql.includes('INSERT ') ||
@@ -50,9 +56,11 @@ ${state.schemaContext}`,
       sql = `${sql} LIMIT 100`;
     }
 
-    return { sql: sql.trim(), error: undefined }; // clear any previous errors
+    logger.info('tool_result', { tool: 'sql_generator', sqlLength: sql.trim().length });
+
+    return { sql: sql.trim(), error: undefined };
   } catch (err: any) {
-    console.error(err);
+    logger.error('sql_generation_error', { error: err.message });
     return {
       error: err.message,
     };

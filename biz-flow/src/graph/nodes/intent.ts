@@ -1,9 +1,17 @@
 import { GraphState, IntentData } from '../../types';
 import { mistral } from '../../config/llm';
+import { createLogger } from '../../lib/logger';
 
 export async function intentNode(state: GraphState): Promise<Partial<GraphState>> {
+  const logger = createLogger({
+    requestId: state.requestId || 'unknown',
+    traceId: state.traceId,
+  });
+
   try {
     const historyText = state.history?.map((h) => `${h.role}: ${h.content}`).join('\n') || '';
+
+    logger.info('tool_call', { tool: 'intent_classifier' });
 
     const response = await mistral.invoke([
       [
@@ -37,11 +45,13 @@ Examples:
       classification = 'CHAT';
     }
 
+    logger.info('tool_result', { tool: 'intent_classifier', intent: classification });
+
     return {
       intent: classification as IntentData,
     };
-  } catch (err) {
-    console.error('Intent Classification Error:', err);
+  } catch (err: any) {
+    logger.error('intent_classification_error', { error: err.message });
     return { intent: 'CHAT' };
   }
 }

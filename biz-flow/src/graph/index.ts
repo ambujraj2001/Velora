@@ -8,28 +8,38 @@ import { executeNode } from './nodes/execute';
 import { retryNode } from './nodes/retry';
 import { dashboardPlanningNode } from './nodes/dashboardPlan';
 import { fragmentBuilderNode } from './nodes/fragmentBuilder';
-import logger from '../lib/logger';
+import { createLogger } from '../lib/logger';
 
 const withLogging = (name: string, node: any) => {
   return async (state: any, config: any) => {
-    logger.info(`Node Start: ${name}`, { stateKeys: Object.keys(state) });
+    const logger = createLogger({
+      requestId: state.requestId || 'unknown',
+      traceId: state.traceId,
+    });
+
+    logger.info('node_start', { node: name, stateKeys: Object.keys(state) });
+    const start = Date.now();
+
     try {
       const result = await node(state, config);
-      logger.info(`Node End: ${name}`, {
+      logger.info('node_end', {
+        node: name,
+        duration: Date.now() - start,
         resultKeys: Object.keys(result || {}),
       });
       return result;
     } catch (error: any) {
-      logger.error(`Node Error: ${name}`, { error: error.message });
+      logger.error('node_error', {
+        node: name,
+        duration: Date.now() - start,
+        error: error.message,
+        stack: error.stack,
+      });
       throw error;
     }
   };
 };
 
-/**
- * State Annotation for proper TypeScript support in LangGraph.
- * This defines how each field is initialized and combined (reducers).
- */
 export const GraphStateAnnotation = Annotation.Root({
   userInput: Annotation<string>(),
   intent: Annotation<IntentData>({
@@ -53,9 +63,10 @@ export const GraphStateAnnotation = Annotation.Root({
   conversationId: Annotation<string | undefined>(),
   schemaContext: Annotation<string | undefined>(),
   connectionSettings: Annotation<any | undefined>(),
+  traceId: Annotation<string | undefined>(),
+  requestId: Annotation<string | undefined>(),
 });
 
-// Routing logic
 const routeAfterIntent = (state: typeof GraphStateAnnotation.State) => {
   if (state.intent === 'CHAT') return 'chatNode';
   if (state.intent === 'DATA_QUERY') return 'sqlNode';

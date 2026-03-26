@@ -2,6 +2,7 @@ import { supabase } from '../config/db';
 import { requireSessionUser } from '../utils/auth';
 
 export const getSettings = async (req: any, res: any) => {
+  const { logger } = req.context;
   try {
     const user = requireSessionUser(req, res);
     if (!user) return;
@@ -14,11 +15,13 @@ export const getSettings = async (req: any, res: any) => {
 
     res.json(data || { query_run_mode: 'ask_every_time' });
   } catch (err: any) {
+    logger.error('settings_fetch_error', { error: err.message });
     res.status(500).json({ error: err.message });
   }
 };
 
 export const updateSettings = async (req: any, res: any) => {
+  const { logger } = req.context;
   try {
     const user = requireSessionUser(req, res);
     if (!user) return;
@@ -37,23 +40,23 @@ export const updateSettings = async (req: any, res: any) => {
     if (error) throw error;
     res.json(data);
   } catch (err: any) {
+    logger.error('settings_update_error', { error: err.message });
     res.status(500).json({ error: err.message });
   }
 };
 
 export const getTeam = async (req: any, res: any) => {
+  const { logger } = req.context;
   try {
     const user = requireSessionUser(req, res);
     if (!user) return;
 
-    // Return the current user as the owner
     const { data: me } = await supabase
       .from('velora_users')
       .select('id, email, name, created_at')
       .eq('id', user.userId)
       .single();
 
-    // Also return accepted invites
     const { data: invites } = await supabase
       .from('velora_team_invites')
       .select('*')
@@ -65,7 +68,6 @@ export const getTeam = async (req: any, res: any) => {
       members.push({ ...me, role: 'Owner', status: 'Active' });
     }
 
-    // Add accepted invitees as members
     if (invites) {
       for (const inv of invites) {
         members.push({
@@ -81,11 +83,13 @@ export const getTeam = async (req: any, res: any) => {
 
     res.json(members);
   } catch (err: any) {
+    logger.error('team_fetch_error', { error: err.message });
     res.status(500).json({ error: err.message });
   }
 };
 
 export const sendInvites = async (req: any, res: any) => {
+  const { logger } = req.context;
   try {
     const user = requireSessionUser(req, res);
     if (!user) return;
@@ -94,6 +98,8 @@ export const sendInvites = async (req: any, res: any) => {
     if (!emails || !Array.isArray(emails) || emails.length === 0) {
       return res.status(400).json({ error: 'Provide an array of emails.' });
     }
+
+    logger.info('invites_sending', { count: emails.length });
 
     const rows = emails.map((email: string) => ({
       invited_by: user.userId,
@@ -109,6 +115,7 @@ export const sendInvites = async (req: any, res: any) => {
     if (error) throw error;
     res.json(data);
   } catch (err: any) {
+    logger.error('invites_send_error', { error: err.message });
     res.status(500).json({ error: err.message });
   }
 };

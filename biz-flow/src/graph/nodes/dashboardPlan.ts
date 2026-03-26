@@ -2,13 +2,17 @@ import { GraphState, AnyFragment } from '../../types';
 import { v4 as uuidv4 } from 'uuid';
 import { mistral } from '../../config/llm';
 import { getClickhouseClient } from '../../lib/clickhouse';
-import logger from '../../lib/logger';
+import { createLogger } from '../../lib/logger';
 
 export async function dashboardPlanningNode(state: GraphState): Promise<Partial<GraphState>> {
-  try {
-    logger.info('Starting Dashboard Planning...', { userInput: state.userInput });
+  const logger = createLogger({
+    requestId: state.requestId || 'unknown',
+    traceId: state.traceId,
+  });
 
-    // 1. Generate Planning Strategy
+  try {
+    logger.info('tool_call', { tool: 'dashboard_planner', userInput: state.userInput });
+
     const strategyRes = await mistral.invoke([
       [
         'system',
@@ -32,14 +36,14 @@ Return ONLY a valid JSON array of sub-tasks.`,
     const subTasks = JSON.parse(content);
     const dashboardFragments: AnyFragment[] = [];
 
-    // 2. Process each sub-task
+    logger.info('tool_result', { tool: 'dashboard_planner', subTaskCount: subTasks.length });
+
     const client = getClickhouseClient(state.connectionSettings as any);
 
     for (const task of subTasks) {
       try {
-        logger.info(`Processing dashboard sub-task: ${task.title}`);
+        logger.info('tool_call', { tool: 'dashboard_subtask', title: task.title });
 
-        // Generate SQL for sub-task
         const sqlRes = await mistral.invoke([
           [
             'system',
@@ -57,12 +61,15 @@ Return ONLY the SQL. Limit to 50 rows.`,
           .replace(/```sql|```/g, '')
           .trim();
 
-        // Execute
+        logger.info('db_query', { tool: 'clickhouse', subtask: task.title });
+
         const resultSet = await client.query({
           query: sql,
           format: 'JSONEachRow',
         });
         const rows = (await resultSet.json()) as any[];
+
+        logger.info('db_query_result', { subtask: task.title, rowCount: rows.length });
 
         if (rows.length === 0) continue;
 
@@ -78,7 +85,6 @@ Return ONLY the SQL. Limit to 50 rows.`,
             },
           });
         } else {
-          // Generate Chart Config
           const chartConfigRes = await mistral.invoke([
             [
               'system',
@@ -104,11 +110,10 @@ Ensure it's a valid object that highcharts-react-official can consume.`,
             data: { highchartOptions: JSON.parse(configStr) },
           });
         }
-      } catch (err) {
-        logger.error(`Failed sub-task: ${task.title}`, { error: err });
-      } finally {
-        // Each sub-task creates its own client connection in the loop?
-        // Actually the client is created once outside.
+
+        logger.info('tool_result', { tool: 'dashboard_subtask', title: task.title });
+      } catch (err: any) {
+        logger.error('dashboard_subtask_failed', { title: task.title, error: err.message });
       }
     }
 
@@ -118,7 +123,6 @@ Ensure it's a valid object that highcharts-react-official can consume.`,
       return { error: 'Could not generate any meaningful data for this dashboard.' };
     }
 
-    // 3. Assemble Final Dashboard Fragment
     const titleRes = await mistral.invoke([
       [
         'system',
@@ -139,11 +143,16 @@ Ensure it's a valid object that highcharts-react-official can consume.`,
       },
     };
 
+    logger.info('dashboard_complete', {
+      title: dashboardTitle,
+      fragmentCount: dashboardFragments.length,
+    });
+
     return {
-      fragments: [finalDashboard], // This replaces the fragments since it's a new dashboard
+      fragments: [finalDashboard],
     };
   } catch (err: any) {
-    logger.error('Dashboard Planning Error', { error: err.message });
+    logger.error('dashboard_planning_error', { error: err.message });
     return { error: `Dashboard planning failed: ${err.message}` };
   }
 }
