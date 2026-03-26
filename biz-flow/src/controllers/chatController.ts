@@ -1,6 +1,7 @@
 import { runAgent } from '../agent';
 import { supabase } from '../config/db';
 import { requireSessionUser } from '../utils/auth';
+import { conversationTitlePrompt } from '../prompts';
 
 export const handleChat = async (req: any, res: any) => {
   const { logger, traceId, requestId } = req.context;
@@ -107,14 +108,9 @@ export const handleChat = async (req: any, res: any) => {
         convId = conv.id;
 
         const { mistral } = require('../config/llm');
+        const titleMessages = conversationTitlePrompt({ userInput });
         mistral
-          .invoke([
-            [
-              'system',
-              'Generate a short, 3-5 word title for a chat conversation based on this starting query. No quotes, just the words.',
-            ],
-            ['user', userInput],
-          ])
+          .invoke(titleMessages)
           .then(async (titleRes: any) => {
             await supabase
               .from('velora_conversations')

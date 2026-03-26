@@ -2,6 +2,7 @@ import { GraphState, MarkdownFragment } from '../../types';
 import { mistral } from '../../config/llm';
 import { v4 as uuidv4 } from 'uuid';
 import { createLogger } from '../../lib/logger';
+import { chatResponsePrompt } from '../../prompts';
 
 export async function chatNode(state: GraphState): Promise<Partial<GraphState>> {
   const logger = createLogger({
@@ -12,13 +13,8 @@ export async function chatNode(state: GraphState): Promise<Partial<GraphState>> 
   try {
     logger.info('tool_call', { tool: 'chat_llm' });
 
-    const res = await mistral.invoke([
-      [
-        'system',
-        'You are a helpful AI assistant. Provide a clear, concise, and helpful markdown response to the user.',
-      ],
-      ['user', state.userInput],
-    ]);
+    const messages = chatResponsePrompt({ userInput: state.userInput });
+    const res = await mistral.invoke(messages);
 
     logger.info('tool_result', { tool: 'chat_llm', responseLength: res.content.toString().length });
 

@@ -4,6 +4,7 @@ import { planner } from './planner';
 import { buildGraph, validateDependencyGraph } from './graphBuilder';
 import type { AgentGraphOutput } from './graphBuilder';
 import { invokeWithLogging } from '../lib/llmLogger';
+import { dataSummaryPrompt } from '../prompts';
 import { v4 as uuidv4 } from 'uuid';
 
 export type { AgentContext, AgentResult } from './types';
@@ -96,19 +97,12 @@ export async function runAgent(
     );
     if (sqlResult) {
       try {
+        const summaryMessages = dataSummaryPrompt({
+          userInput,
+          dataSampleJson: JSON.stringify(sqlResult.data.rows.slice(0, 3)),
+        });
         const summaryRes = await invokeWithLogging(
-          [
-            [
-              'system',
-              'You are a data analyst. Generate a catchy heading and a 1-2 sentence summary of the data. Keep it professional and insightful.',
-            ],
-            [
-              'user',
-              `Query: ${userInput}\nData Sample: ${JSON.stringify(
-                sqlResult.data.rows.slice(0, 3),
-              )}`,
-            ],
-          ],
+          summaryMessages,
           { logger: context.logger, tool: 'summary' },
         );
         const lines = summaryRes.content

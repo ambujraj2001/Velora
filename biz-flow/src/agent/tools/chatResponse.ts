@@ -1,5 +1,6 @@
 import type { Tool } from './types';
 import { invokeWithLogging } from '../../lib/llmLogger';
+import { chatResponsePrompt } from '../../prompts';
 
 export const chatResponseTool: Tool = {
   name: 'chat_response',
@@ -14,19 +15,13 @@ export const chatResponseTool: Tool = {
         ?.map((h) => `${h.role}: ${h.content}`)
         .join('\n') || '';
 
+    const messages = chatResponsePrompt({
+      historyText: historyText || undefined,
+      userInput: context.userInput,
+    });
+
     const response = await invokeWithLogging(
-      [
-        [
-          'system',
-          'You are a helpful AI assistant. Provide a clear, concise, and helpful markdown response to the user.',
-        ],
-        [
-          'user',
-          historyText
-            ? `Context:\n${historyText}\n\nUser: ${context.userInput}`
-            : context.userInput,
-        ],
-      ],
+      messages,
       { logger: context.logger, tool: 'chat_response' },
     );
 

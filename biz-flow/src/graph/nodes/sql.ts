@@ -1,6 +1,7 @@
 import { GraphState } from '../../types';
 import { mistral } from '../../config/llm';
 import { createLogger } from '../../lib/logger';
+import { sqlGeneratorPrompt } from '../../prompts';
 
 export async function sqlGenerationNode(state: GraphState): Promise<Partial<GraphState>> {
   const logger = createLogger({
@@ -13,22 +14,12 @@ export async function sqlGenerationNode(state: GraphState): Promise<Partial<Grap
 
     logger.info('tool_call', { tool: 'sql_generator' });
 
-    const response = await mistral.invoke([
-      [
-        'system',
-        `You are a ClickHouse SQL generator.
-Rules:
-1. ONLY return the SQL query.
-2. Only SELECT queries are allowed.
-3. Use the provided schema. 
-4. If a query is a follow-up, consider the history.
-5. Limit results to 100 unless specified.
-
-Schema:
-${state.schemaContext}`,
-      ],
-      ['user', `History:\n${historyText}\n\nNew Request: ${state.userInput}`],
-    ]);
+    const messages = sqlGeneratorPrompt({
+      schemaContext: state.schemaContext || '',
+      historyText,
+      userInput: state.userInput,
+    });
+    const response = await mistral.invoke(messages);
 
     let sql = response.content.toString().trim();
     if (sql.startsWith('```sql')) {

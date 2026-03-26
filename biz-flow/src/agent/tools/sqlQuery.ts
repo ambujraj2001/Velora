@@ -1,6 +1,7 @@
 import type { Tool } from './types';
 import { invokeWithLogging } from '../../lib/llmLogger';
 import { getClickhouseClient } from '../../lib/clickhouse';
+import { sqlGeneratorPrompt } from '../../prompts';
 
 export const sqlQueryTool: Tool = {
   name: 'sql_query',
@@ -17,26 +18,14 @@ export const sqlQueryTool: Tool = {
         ?.map((h) => `${h.role}: ${h.content}`)
         .join('\n') || '';
 
-    const response = await invokeWithLogging(
-      [
-        [
-          'system',
-          `You are a ClickHouse SQL generator.
-Rules:
-1. ONLY return the SQL query.
-2. Only SELECT queries are allowed.
-3. Use the provided schema.
-4. If a query is a follow-up, consider the history.
-5. Limit results to 100 unless specified.
+    const messages = sqlGeneratorPrompt({
+      schemaContext,
+      historyText,
+      userInput: context.userInput,
+    });
 
-Schema:
-${schemaContext}`,
-        ],
-        [
-          'user',
-          `History:\n${historyText}\n\nNew Request: ${context.userInput}`,
-        ],
-      ],
+    const response = await invokeWithLogging(
+      messages,
       { logger: context.logger, tool: 'sql_query' },
     );
 

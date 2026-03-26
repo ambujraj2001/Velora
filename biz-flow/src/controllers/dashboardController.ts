@@ -1,5 +1,6 @@
 import { supabase } from '../config/db';
 import { requireSessionUser } from '../utils/auth';
+import { highchartsConfigPrompt } from '../prompts';
 
 const getUserOrReturn = (req: any, res: any) => {
   const user = requireSessionUser(req, res);
@@ -157,22 +158,15 @@ export const refreshDashboard = async (req: any, res: any) => {
         if (isChart) {
           const contextPrompt = dashboard.description
             ? `Context: Original intent was "${dashboard.description}".`
-            : '';
+            : undefined;
 
-          const chartResponse = await mistral.invoke([
-            [
-              'system',
-              `Generate a Highcharts configuration object for the given data.
-${contextPrompt}
-The chart sub-title is "${query.name || 'Analytics'}".
-Return ONLY the JSON object. 
-Ensure it's a valid object that highcharts-react-official can consume.`,
-            ],
-            [
-              'user',
-              `Data to visualize: ${JSON.stringify(rows.slice(0, 10))}`,
-            ],
-          ]);
+          const chartMessages = highchartsConfigPrompt({
+            chartType: query.type || 'bar',
+            title: query.name || 'Analytics',
+            dataJson: JSON.stringify(rows.slice(0, 10)),
+            contextPrompt,
+          });
+          const chartResponse = await mistral.invoke(chartMessages);
 
           const configStr = chartResponse.content
             .toString()

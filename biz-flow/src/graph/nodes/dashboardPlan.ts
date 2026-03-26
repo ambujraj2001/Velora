@@ -3,6 +3,12 @@ import { v4 as uuidv4 } from 'uuid';
 import { mistral } from '../../config/llm';
 import { getClickhouseClient } from '../../lib/clickhouse';
 import { createLogger } from '../../lib/logger';
+import {
+  dashboardStrategyPrompt,
+  dashboardSubtaskSqlPrompt,
+  highchartsConfigPrompt,
+  dashboardTitlePrompt,
+} from '../../prompts';
 
 export async function dashboardPlanningNode(state: GraphState): Promise<Partial<GraphState>> {
   const logger = createLogger({
@@ -13,22 +19,11 @@ export async function dashboardPlanningNode(state: GraphState): Promise<Partial<
   try {
     logger.info('tool_call', { tool: 'dashboard_planner', userInput: state.userInput });
 
-    const strategyRes = await mistral.invoke([
-      [
-        'system',
-        `You are a Dashboard Architect. Analyze the user request and break it down into 3-4 distinct analytical sub-tasks that would make a great dashboard.
-For each sub-task, provide: 
-- title: A short catchy title
-- sql_question: A specific question that can be answered with a single SQL SELECT query
-- chart_type: Either 'bar', 'line', 'pie', or 'table'
-
-Schema Context:
-${state.schemaContext}
-
-Return ONLY a valid JSON array of sub-tasks.`,
-      ],
-      ['user', state.userInput],
-    ]);
+    const strategyMessages = dashboardStrategyPrompt({
+      schemaContext: state.schemaContext || '',
+      userInput: state.userInput,
+    });
+    const strategyRes = await mistral.invoke(strategyMessages);
 
     let content = strategyRes.content.toString().trim();
     if (content.startsWith('```json')) content = content.replace(/```json|```/g, '').trim();
@@ -44,16 +39,11 @@ Return ONLY a valid JSON array of sub-tasks.`,
       try {
         logger.info('tool_call', { tool: 'dashboard_subtask', title: task.title });
 
-        const sqlRes = await mistral.invoke([
-          [
-            'system',
-            `Generate a ClickHouse SELECT query for: ${task.sql_question}.
-Schema:
-${state.schemaContext}
-Return ONLY the SQL. Limit to 50 rows.`,
-          ],
-          ['user', task.sql_question],
-        ]);
+        const sqlMessages = dashboardSubtaskSqlPrompt({
+          sqlQuestion: task.sql_question,
+          schemaContext: state.schemaContext || '',
+        });
+        const sqlRes = await mistral.invoke(sqlMessages);
 
         let sql = sqlRes.content
           .toString()
@@ -85,17 +75,12 @@ Return ONLY the SQL. Limit to 50 rows.`,
             },
           });
         } else {
-          const chartConfigRes = await mistral.invoke([
-            [
-              'system',
-              `Generate a Highcharts configuration object for the given data.
-The chart type is ${task.chart_type}. 
-The title is "${task.title}".
-Return ONLY the JSON object. 
-Ensure it's a valid object that highcharts-react-official can consume.`,
-            ],
-            ['user', `Data: ${JSON.stringify(rows.slice(0, 10))}`],
-          ]);
+          const chartMessages = highchartsConfigPrompt({
+            chartType: task.chart_type,
+            title: task.title,
+            dataJson: JSON.stringify(rows.slice(0, 10)),
+          });
+          const chartConfigRes = await mistral.invoke(chartMessages);
 
           let configStr = chartConfigRes.content
             .toString()
@@ -123,13 +108,10 @@ Ensure it's a valid object that highcharts-react-official can consume.`,
       return { error: 'Could not generate any meaningful data for this dashboard.' };
     }
 
-    const titleRes = await mistral.invoke([
-      [
-        'system',
-        'Generate a short, professional, analysis-oriented title for a dashboard based on the user query. Return ONLY the title (max 5 words).',
-      ],
-      ['user', state.userInput],
-    ]);
+    const titleMessages = dashboardTitlePrompt({
+      userInput: state.userInput,
+    });
+    const titleRes = await mistral.invoke(titleMessages);
     const dashboardTitle = titleRes.content.toString().trim().replace(/^"|"$/g, '');
 
     const finalDashboard: AnyFragment = {

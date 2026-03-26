@@ -2,6 +2,12 @@ import type { Tool } from './types';
 import type { AnyFragment } from '../../types';
 import { invokeWithLogging } from '../../lib/llmLogger';
 import { getClickhouseClient } from '../../lib/clickhouse';
+import {
+  dashboardStrategyPrompt,
+  dashboardSubtaskSqlPrompt,
+  highchartsConfigPrompt,
+  dashboardTitlePrompt,
+} from '../../prompts';
 import { v4 as uuidv4 } from 'uuid';
 
 export const dashboardBuilderTool: Tool = {
@@ -14,23 +20,12 @@ export const dashboardBuilderTool: Tool = {
 
     context.logger.info('tool_call', { tool: 'dashboard_builder' });
 
+    const strategyMessages = dashboardStrategyPrompt({
+      schemaContext,
+      userInput: context.userInput,
+    });
     const strategyRes = await invokeWithLogging(
-      [
-        [
-          'system',
-          `You are a Dashboard Architect. Break the request into 3-4 analytical sub-tasks.
-For each sub-task, provide:
-- title: short catchy title
-- sql_question: a question answerable by a single SQL SELECT
-- chart_type: 'bar', 'line', 'pie', or 'table'
-
-Schema Context:
-${schemaContext}
-
-Return ONLY a valid JSON array of sub-tasks.`,
-        ],
-        ['user', context.userInput],
-      ],
+      strategyMessages,
       { logger: context.logger, tool: 'dashboard_strategy' },
     );
 
@@ -55,17 +50,12 @@ Return ONLY a valid JSON array of sub-tasks.`,
             title: task.title,
           });
 
+          const sqlMessages = dashboardSubtaskSqlPrompt({
+            sqlQuestion: task.sql_question,
+            schemaContext,
+          });
           const sqlRes = await invokeWithLogging(
-            [
-              [
-                'system',
-                `Generate a ClickHouse SELECT query for: ${task.sql_question}.
-Schema:
-${schemaContext}
-Return ONLY the SQL. Limit to 50 rows.`,
-              ],
-              ['user', task.sql_question],
-            ],
+            sqlMessages,
             { logger: context.logger, tool: 'dashboard_subtask_sql' },
           );
 
@@ -102,18 +92,13 @@ Return ONLY the SQL. Limit to 50 rows.`,
               data: { columns: Object.keys(rows[0]), rows },
             });
           } else {
+            const chartMessages = highchartsConfigPrompt({
+              chartType: task.chart_type,
+              title: task.title,
+              dataJson: JSON.stringify(rows.slice(0, 10)),
+            });
             const chartRes = await invokeWithLogging(
-              [
-                [
-                  'system',
-                  `Generate a Highcharts configuration object for the given data.
-The chart type is ${task.chart_type}.
-The title is "${task.title}".
-Return ONLY the JSON object.
-Ensure it's valid for highcharts-react-official.`,
-                ],
-                ['user', `Data: ${JSON.stringify(rows.slice(0, 10))}`],
-              ],
+              chartMessages,
               { logger: context.logger, tool: 'dashboard_chart_config' },
             );
 
@@ -151,14 +136,11 @@ Ensure it's valid for highcharts-react-official.`,
       throw new Error('Could not generate any meaningful data for this dashboard.');
     }
 
+    const titleMessages = dashboardTitlePrompt({
+      userInput: context.userInput,
+    });
     const titleRes = await invokeWithLogging(
-      [
-        [
-          'system',
-          'Generate a short, professional, analysis-oriented title for a dashboard. Return ONLY the title (max 5 words).',
-        ],
-        ['user', context.userInput],
-      ],
+      titleMessages,
       { logger: context.logger, tool: 'dashboard_title' },
     );
     const dashboardTitle = titleRes.content.toString().trim().replace(/^"|"$/g, '');
