@@ -1,6 +1,5 @@
-import { createGraph } from '../graph';
+import { runAgent } from '../agent';
 import { supabase } from '../config/db';
-import { GraphState } from '../types';
 import { requireSessionUser } from '../utils/auth';
 
 export const handleChat = async (req: any, res: any) => {
@@ -14,6 +13,7 @@ export const handleChat = async (req: any, res: any) => {
 
     const { userInput, conversationId, connectionId } = req.body;
 
+    // --- Connection fetching (unchanged) ---
     let connSettings = undefined;
     let finalConnId = connectionId;
 
@@ -21,7 +21,10 @@ export const handleChat = async (req: any, res: any) => {
     if (finalConnId) {
       connQuery.eq('id', finalConnId);
     } else {
-      connQuery.eq('user_id', user.userId).order('created_at', { ascending: false }).limit(1);
+      connQuery
+        .eq('user_id', user.userId)
+        .order('created_at', { ascending: false })
+        .limit(1);
     }
 
     const { data: conn } = await connQuery.maybeSingle();
@@ -37,18 +40,20 @@ export const handleChat = async (req: any, res: any) => {
           username: conn.username,
           password: decrypt(conn.password),
         };
-        logger.info('connection_resolved', { connId: finalConnId, type: conn.type });
+        logger.info('connection_resolved', {
+          connId: finalConnId,
+          type: conn.type,
+        });
       } catch (decErr: any) {
-        logger.error('connection_decrypt_failed', { error: decErr.message });
+        logger.error('connection_decrypt_failed', {
+          error: decErr.message,
+        });
       }
     } else {
       logger.warn('connection_not_found', { userId: user.userId });
     }
 
-    const { fetchSchema } = require('../services/schemaService');
-    const schemaContext = await fetchSchema(connSettings);
-    logger.info('schema_fetched', { schemaLength: schemaContext.length });
-
+    // --- History fetching (unchanged) ---
     let history: any[] = [];
     if (conversationId) {
       const { data: msgs } = await supabase
@@ -60,29 +65,29 @@ export const handleChat = async (req: any, res: any) => {
       if (msgs) history = msgs;
     }
 
-    const builder = createGraph();
-
-    const initialState = {
-      userInput,
-      intent: 'CHAT' as const,
-      sql: undefined,
-      rows: undefined,
-      error: undefined,
-      retryCount: 0,
-      fragments: [],
-      dashboardPlan: undefined,
-      connectionId: finalConnId,
-      connectionSettings: connSettings,
-      conversationId,
-      schemaContext,
-      history,
+    // --- Run agent (replaces graph) ---
+    const agentResult = await runAgent(userInput, {
       traceId,
       requestId,
-    } satisfies GraphState;
+      logger,
+      userId: user.userId,
+      userInput,
+      connectionSettings: connSettings,
+      connectionId: finalConnId,
+      history,
+    });
 
-    const result = await builder.invoke(initialState);
-    logger.info('graph_complete', { resultKeys: Object.keys(result || {}) });
+    logger.info('agent_complete', {
+      stepCount: agentResult.stepResults.length,
+      fragmentCount: agentResult.fragments.length,
+    });
 
+    // Extract SQL from step results for persistence
+    const sqlStep = agentResult.stepResults.find(
+      (r) => r.tool === 'sql_query' && !r.error,
+    );
+
+    // --- Supabase persistence (unchanged) ---
     let convId = conversationId;
     if (!convId) {
       logger.info('conversation_creating', { userId: user.userId });
@@ -110,34 +115,38 @@ export const handleChat = async (req: any, res: any) => {
             ],
             ['user', userInput],
           ])
-          .then(async (res: any) => {
+          .then(async (titleRes: any) => {
             await supabase
               .from('velora_conversations')
-              .update({ title: res.content.toString() })
+              .update({ title: titleRes.content.toString() })
               .eq('id', convId);
           })
-          .catch((e: any) => logger.error('title_generation_failed', { error: e.message }));
+          .catch((e: any) =>
+            logger.error('title_generation_failed', { error: e.message }),
+          );
       }
     }
 
     if (convId) {
       logger.info('messages_inserting', { convId });
-      const { error: msgError } = await supabase.from('velora_messages').insert([
-        {
-          conversation_id: convId,
-          role: 'user',
-          content: userInput,
-          fragments: [],
-        },
-        {
-          conversation_id: convId,
-          role: 'assistant',
-          content: '',
-          fragments: result.fragments || [],
-          sql: result.sql,
-          connection_id: finalConnId,
-        },
-      ]);
+      const { error: msgError } = await supabase
+        .from('velora_messages')
+        .insert([
+          {
+            conversation_id: convId,
+            role: 'user',
+            content: userInput,
+            fragments: [],
+          },
+          {
+            conversation_id: convId,
+            role: 'assistant',
+            content: '',
+            fragments: agentResult.fragments,
+            sql: sqlStep?.data?.sql,
+            connection_id: finalConnId,
+          },
+        ]);
       if (msgError) {
         logger.error('messages_insert_failed', { error: msgError });
       }
@@ -145,14 +154,20 @@ export const handleChat = async (req: any, res: any) => {
       logger.warn('messages_skipped_no_conversation');
     }
 
-    logger.info('chat_response', { convId, fragmentsCount: result.fragments?.length });
+    logger.info('chat_response', {
+      convId,
+      fragmentsCount: agentResult.fragments.length,
+    });
     res.status(200).json({
       conversationId: convId,
       connectionId: finalConnId,
-      fragments: result.fragments || [],
+      fragments: agentResult.fragments,
     });
   } catch (err: any) {
-    logger.error('chat_controller_error', { error: err.message, stack: err.stack });
+    logger.error('chat_controller_error', {
+      error: err.message,
+      stack: err.stack,
+    });
     res.status(500).json({ error: err.message });
   }
 };
