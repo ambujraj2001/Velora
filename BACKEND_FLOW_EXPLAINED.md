@@ -1,870 +1,236 @@
-# Backend Flow Explained
+# Backend Architecture
 
-This file explains how your backend works today in simple human words.
+## 1. System Overview
 
-It covers:
-- how the server starts
-- how login works
-- how chat works
-- how database connections work
-- how conversations are saved
-- how dashboards are saved and refreshed
-- how settings and team invites work
-- what data is stored
-- what supporting services are involved behind the scenes
+The backend is a single Express server that connects three external systems:
 
----
+- **Supabase** — all app data (users, chats, connections, dashboards, settings)
+- **ClickHouse** — the user's business data (read-only)
+- **Mistral AI** — understands requests, writes SQL, generates summaries and charts
 
-## 1. Big Picture
-
-Your app has **one backend server**.
-
-That backend mainly talks to **three outside systems**:
-- **Supabase** for storing app data like users, chats, connections, dashboards, settings, and invites
-- **ClickHouse** for reading the business data the user wants to ask questions about
-- **Mistral AI** for understanding the user request, writing SQL, creating summaries, and building dashboard/chart ideas
-
-### Main backend idea
-
-1. The frontend sends a request to the backend.
-2. The backend checks who the user is.
-3. The backend loads the user’s saved database connection.
-4. The backend reads the database structure.
-5. The backend decides what kind of request this is:
-   - normal chat
-   - data question
-   - dashboard request
-6. The backend gets the answer.
-7. The backend saves the result.
-8. The backend sends ready-to-show pieces back to the frontend.
-
----
-
-## 2. Overall Backend Map
-
-### Word diagram
-
-```text
-User in frontend
-  ->
-Backend server
-  ->
-Different backend flows
-  ->
-- Login flow -> Google
-- Chat flow -> Mistral AI + ClickHouse + Supabase
-- Connections flow -> ClickHouse + Supabase
-- Conversation history flow -> Supabase
-- Dashboard flow -> Mistral AI + ClickHouse + Supabase
-- Settings and team flow -> Supabase
+```
+┌──────────┐       ┌──────────────────────┐
+│ Frontend │──────▶│       Backend        │
+└──────────┘       │                      │
+                   │  Auth ──────▶ Google  │
+                   │  Agent ─────▶ Mistral │
+                   │  Queries ───▶ ClickH. │
+                   │  Storage ───▶ Supabase│
+                   └──────────────────────┘
 ```
 
 ---
 
-## 3. Server Entry Flow
+## 2. Authentication
 
-When the backend starts:
+Uses Google OAuth with a signed session cookie.
 
-- it creates an Express server
-- it allows the frontend to call it
-- it accepts JSON data
-- it opens these main route groups:
-  - `/auth`
-  - `/chat`
-  - `/connections`
-  - `/conversations`
-  - `/dashboards`
-  - `/settings`
-- it also exposes `/health` for a simple health check
+**Example:** A new user visits the app.
 
-### Startup flow
+1. User clicks "Sign in with Google"
+2. Backend redirects to Google's login page
+3. Google sends the user back with a login code
+4. Backend exchanges the code for the user's profile
+5. Backend creates or updates the user in Supabase
+6. Backend sets a signed session cookie
+7. All future requests use that cookie to identify the user
 
-```text
-Backend starts
-  ->
-Allow frontend requests
-  ->
-Accept JSON data
-  ->
-Open all route groups
-  ->
-Start listening on the server port
-```
+Every protected endpoint reads and verifies this cookie before proceeding.
 
 ---
 
-## 4. Authentication Flow
+## 3. Chat — The Core Flow
 
-Your app uses **Google login**.
+This is the most important part of the backend. When a user sends a message, the backend does far more than just call an AI.
 
-After login, your backend creates its own **session cookie** and uses that cookie on future requests.
+**Example:** User sends _"top 5 airlines by passengers"_
 
-### What happens during login
-
-1. User clicks login.
-2. Frontend sends user to `/auth/google/start`.
-3. Backend redirects the user to Google.
-4. Google sends the user back to `/auth/google/callback` with a login code.
-5. Backend exchanges that code for the user profile.
-6. Backend creates a stable internal user id from the Google user id.
-7. Backend saves or updates the user in Supabase table `velora_users`.
-8. Backend creates a signed session token.
-9. Backend stores that token in a cookie called `velora_session`.
-10. Backend redirects the user back to the frontend.
-
-### Login diagram
-
-```text
-User
-  ->
-Frontend
-  ->
-Backend /auth/google/start
-  ->
-Google login page
-  ->
-Backend /auth/google/callback
-  ->
-Get Google profile
-  ->
-Save or update user in Supabase
-  ->
-Create session cookie
-  ->
-Send user back to frontend
 ```
-
-### How future requests know the user
-
-For protected routes, the backend:
-
-- reads the session cookie
-- verifies the cookie signature
-- rebuilds the internal user id
-- if valid, allows the request
-- if not valid, returns `Unauthorized`
-
-### Auth endpoints
-
-- `GET /auth/google/start` -> starts Google login
-- `GET /auth/google/callback` -> finishes Google login
-- `GET /auth/me` -> returns the current logged-in user
-- `GET /auth/logout` and `POST /auth/logout` -> clears the session cookie
-
----
-
-## 5. Chat Flow
-
-This is the most important backend flow in your app.
-
-When the user sends a message, the backend does much more than just ask an AI model for text.
-
-It:
-
-- checks the user
-- finds the right data connection
-- loads the database structure
-- loads recent conversation history
-- sends everything through a multi-step decision flow
-- saves the conversation and messages
-- returns ready-made UI blocks to the frontend
-
-### Full chat flow
-
-```text
 User sends message
-  ->
-POST /chat
-  ->
-Check logged in user
-  ->
-Find selected connection or latest saved connection
-  ->
-Decrypt saved database password
-  ->
-Read tables and columns from ClickHouse
-  ->
-Load recent conversation history
-  ->
-Run AI decision flow
-  ->
-Save conversation if needed
-  ->
-Save user message and assistant result
-  ->
-Send ready-made fragments back to frontend
-```
-
-### What the chat request receives
-
-The chat route receives:
-
-- the user message
-- optional conversation id
-- optional connection id
-
-### Step-by-step details
-
-#### Step 1. Clear previous logs
-
-At the beginning of each chat request:
-
-- the backend clears the current log file
-- then writes fresh logs for this request
-
-This helps you inspect one request at a time.
-
-#### Step 2. Check the user
-
-The backend only continues if the session cookie is valid.
-
-If not, it stops with a 401 response.
-
-#### Step 3. Find the data connection
-
-The backend looks in `velora_connections`.
-
-- If the request includes a connection id, it uses that one.
-- If not, it uses the user’s newest saved connection.
-- If none is found, it falls back to default environment-based database settings.
-
-#### Step 4. Decrypt the saved password
-
-Saved connection passwords are stored in encrypted form.
-
-Before using them, the backend decrypts the password.
-
-#### Step 5. Read the database structure
-
-The backend asks ClickHouse:
-
-- what tables exist
-- what columns each table has
-
-It turns that into a plain text description of the database structure.
-
-This is later given to the AI so it knows what data exists.
-
-#### Step 6. Load recent conversation history
-
-If a conversation id is present, the backend loads up to the last 10 messages from `velora_messages`.
-
-This helps the AI understand follow-up questions.
-
-#### Step 7. Run the AI decision flow
-
-This is handled by your graph flow.
-
-The graph decides whether the message is:
-
-- a normal chat request
-- a data question
-- a dashboard request
-
-Then it follows the right path.
-
----
-
-## 6. The AI Decision Flow Inside Chat
-
-Your backend uses a step-by-step internal flow for chat requests.
-
-### Main decision map
-
-```text
-Start
-  ->
-Understand user intent
-  ->
-Choose one path
-
-If normal talk:
-  -> create text answer
-  -> return fragments
-
-If data question:
-  -> write SQL
-  -> run SQL on ClickHouse
-  -> if query fails, retry up to 2 times
-  -> if query works, build response pieces
-  -> return fragments
-
-If dashboard request:
-  -> plan dashboard sections
-  -> create dashboard pieces
-  -> return fragments
-```
-
-### 6.1 Intent step
-
-The first AI step looks at:
-
-- the new user message
-- the recent chat history
-
-It decides one label only:
-
-- `CHAT`
-- `DATA_QUERY`
-- `DASHBOARD`
-
-#### Meaning of each label
-
-- `CHAT` means normal conversation, explanation, greeting, or general help
-- `DATA_QUERY` means the user wants one data answer, usually one table or one result set
-- `DASHBOARD` means the user wants a bigger view with multiple angles, charts, or sections
-
-### 6.2 If it is normal chat
-
-The backend asks Mistral for a clean helpful reply.
-
-Then it wraps the answer as a markdown block and returns it.
-
-This path does **not** query ClickHouse for data results.
-
-### 6.3 If it is a data question
-
-The backend asks Mistral to write a ClickHouse `SELECT` query using:
-
-- the user message
-- the recent history
-- the database structure text
-
-Safety rules are applied:
-
-- only read-only queries are allowed
-- write and delete actions are blocked
-- if no result limit is present, a limit of 100 is added
-
-Then the backend runs the query in ClickHouse.
-
-#### If the query fails
-
-- the backend records the error
-- it retries up to 2 times
-- after the final failure, it creates an error block for the frontend
-
-#### If the query works
-
-The backend creates three output pieces:
-
-1. a short summary block
-2. a table block with rows and columns
-3. the SQL block
-
-So the frontend receives already-structured content, not just plain text.
-
-### 6.4 If it is a dashboard request
-
-The backend asks Mistral to break the request into 3 or 4 smaller analysis tasks.
-
-For each smaller task, it:
-
-1. creates a SQL question
-2. writes a SQL query
-3. runs it in ClickHouse
-4. decides whether the output should be a table or chart
-5. if chart, asks Mistral to prepare chart settings
-
-Then all those pieces are grouped into one dashboard block.
-
-If no useful pieces are created, the backend returns an error.
-
----
-
-## 7. What Happens After the Chat Result Is Ready
-
-Once the AI flow finishes:
-
-### If this is a new conversation
-
-The backend creates a new row in `velora_conversations`:
-
-- user id
-- a temporary title from the first user message
-
-After that, it separately asks Mistral to create a shorter better title and updates that conversation title in the background.
-
-### Then messages are saved
-
-The backend inserts two rows in `velora_messages`:
-
-1. the user message
-2. the assistant result
-
-The assistant message stores:
-
-- the generated UI fragments
-- the SQL if there is one
-- the connection id used
-
-### Chat save diagram
-
-```text
-Graph result ready
-  ->
-Check if conversation already exists
-
-If no:
-  -> create conversation
-  -> create better title in background
-
-If yes:
-  -> use existing conversation
-
-Then:
-  -> save user message
-  -> save assistant message with fragments and SQL
-  -> return response to frontend
-```
-
-### Final chat response sent to frontend
-
-The backend returns:
-
-- conversation id
-- connection id
-- fragments
-
-The frontend can render those fragments directly.
-
----
-
-## 8. Connection Flow
-
-This part manages the user’s data source settings.
-
-### What the backend supports today
-
-The backend accepts these connection types:
-
-- ClickHouse
-- Postgres
-
-But the current real data-reading flow is built around **ClickHouse queries**.
-
-### Add connection flow
-
-When a user adds a connection:
-
-1. backend checks the user
-2. backend checks if the connection type is allowed
-3. backend encrypts the password
-4. backend saves the connection in `velora_connections`
-5. backend returns the saved record without the password
-
-### Connection browsing flow
-
-The backend can also:
-
-- list all user connections
-- delete a connection
-- list tables from a selected connection
-- list columns from a selected table
-
-### Connection diagram
-
-```text
-Save connection flow:
-User saves connection
-  ->
-Check logged in user
-  ->
-Validate connection type
-  ->
-Encrypt password
-  ->
-Save in Supabase
-
-Browse connection flow:
-User opens data context
-  ->
-Load saved connection
-  ->
-Decrypt password
-  ->
-Ask ClickHouse for tables
-  ->
-Ask ClickHouse for columns
-```
-
-### Connection endpoints
-
-- `POST /connections` -> save a new connection
-- `GET /connections` -> list the user’s saved connections
-- `DELETE /connections/:id` -> delete one connection
-- `GET /connections/:id/tables` -> list tables
-- `GET /connections/:id/tables/:table/columns` -> list columns
-
----
-
-## 9. Conversation History Flow
-
-This is the part that supports the chat history page and reopening old chats.
-
-### What it does
-
-- lists all saved conversations for the logged-in user
-- returns all messages inside one conversation
-- deletes a conversation
-
-### Safety check here
-
-Before returning messages, the backend first checks that the requested conversation belongs to the current user.
-
-### Conversation endpoints
-
-- `GET /conversations` -> list all conversations
-- `GET /conversations/:conversationId/messages` -> list all messages in one conversation
-- `DELETE /conversations/:conversationId` -> delete one conversation
-
-### Conversation flow
-
-```text
-User opens chat history
-  ->
-List conversations from Supabase
-
-User opens one conversation
-  ->
-Check that it belongs to this user
-  ->
-Load all messages in time order
+  → Verify session
+  → Find saved database connection (or fall back to defaults)
+  → Decrypt the stored password
+  → Load last 10 messages for follow-up awareness
+  → Hand off to the Agent
+  → Save conversation + messages
+  → Return ready-to-render UI pieces
 ```
 
 ---
 
-## 10. Dashboard Flow
+## 4. The Agent — How Requests Are Processed
 
-Your backend has two dashboard paths:
+The agent replaced an older fixed-pipeline approach. Instead of hardcoded paths, it now **dynamically plans** what to do for each request.
 
-1. creating and saving a dashboard
-2. refreshing an existing dashboard
+### How it works
 
-### 10.1 Save dashboard flow
+1. **Planning** — An LLM reads the user's message and decides which tools to use and in what order. It produces a step-by-step execution plan.
 
-When the frontend wants to save a dashboard, it sends:
+2. **Execution** — The plan is turned into a dependency graph. Steps run in order, and each step can use the output of a previous step. If a step fails, all steps that depend on it are skipped automatically.
 
-- connection id
-- dashboard name
-- description
-- fragments
-- queries
+3. **Assembly** — Results from each step are converted into typed UI fragments (text, tables, charts, dashboards, errors) and sent back to the frontend.
 
-The backend stores that in `velora_dashboards`.
+### Available tools
 
-### 10.2 Get dashboards flow
+| Tool | What it does |
+|---|---|
+| Schema Lookup | Reads the database structure (tables and columns) so the AI knows what data exists |
+| SQL Query | AI writes a SELECT query from the user's question, then runs it on ClickHouse |
+| Chat Response | AI generates a conversational reply (no database involved) |
+| Dashboard Builder | AI breaks the request into 3–4 analytical views, generates SQL + chart configs for each |
 
-The backend can:
+### Example plans for different requests
 
-- list all dashboards for the current user
-- return one dashboard by id
-- delete a dashboard
+**"top 5 airlines by passengers"** → data question
 
-### 10.3 Refresh dashboard flow
-
-This is the smart part.
-
-When refresh is requested:
-
-1. backend checks the user
-2. backend loads the saved dashboard
-3. backend loads the saved connection
-4. backend decrypts the database password
-5. backend reruns each saved query in ClickHouse
-6. for each result:
-   - if the result fits a chart style, it creates a chart
-   - otherwise it creates a table
-7. backend updates the dashboard with fresh fragments
-8. backend saves the refresh time
-
-### Dashboard refresh diagram
-
-```text
-User clicks refresh dashboard
-  ->
-Load saved dashboard
-  ->
-Load saved connection
-  ->
-Decrypt password
-  ->
-Run saved queries again
-  ->
-Check the result shape
-
-If chart friendly:
-  -> create chart settings with AI
-
-If not chart friendly:
-  -> create table block
-
-Then:
-  -> build fresh dashboard fragments
-  -> update dashboard in Supabase
+```
+Step 1: Schema Lookup → get table/column info
+Step 2: SQL Query (needs Step 1) → write and run a SELECT query
 ```
 
-### Dashboard endpoints
+**"hello, what can you do?"** → general conversation
 
-- `POST /dashboards/save` -> save dashboard
-- `GET /dashboards` -> list dashboards
-- `GET /dashboards/:id` -> get one dashboard
-- `POST /dashboards/:id/refresh` -> refresh dashboard data
-- `DELETE /dashboards/:id` -> delete dashboard
-
----
-
-## 11. Settings and Team Flow
-
-This part stores a small amount of user preference data and team invites.
-
-### Settings flow
-
-The backend reads and writes the user setting `query_run_mode`.
-
-If no setting exists yet, it returns a default value:
-
-- `ask_every_time`
-
-### Team flow
-
-When the user opens the team area:
-
-- the backend loads the current user from `velora_users`
-- the backend loads invite rows from `velora_team_invites`
-- it combines them into one member list
-
-When invites are sent:
-
-- the backend receives a list of emails
-- it stores them as pending invite rows
-
-### Settings endpoints
-
-- `GET /settings` -> get settings
-- `PUT /settings` -> update settings
-- `GET /settings/team` -> get owner and invited members
-- `POST /settings/invite` -> save invite emails
-
----
-
-## 12. Data Stored By The Backend
-
-Here are the main Supabase tables your backend uses today.
-
-### User-related
-
-- `velora_users` -> app users created after Google login
-- `velora_settings` -> user preferences
-- `velora_team_invites` -> pending or accepted invites
-
-### Connection-related
-
-- `velora_connections` -> saved database connections with encrypted passwords
-
-### Chat-related
-
-- `velora_conversations` -> top-level chat threads
-- `velora_messages` -> user and assistant messages inside each thread
-
-### Dashboard-related
-
-- `velora_dashboards` -> saved dashboards, fragments, and saved queries
-
-### Storage map
-
-```text
-Supabase
-  ->
-- velora_users
-- velora_settings
-- velora_team_invites
-- velora_connections
-- velora_conversations
-- velora_messages
-- velora_dashboards
+```
+Step 1: Chat Response → generate a helpful text reply
 ```
 
----
+**"create a flight operations dashboard"** → dashboard request
 
-## 13. Support Pieces Behind The Scenes
-
-These parts support the backend even if the user never sees them directly.
-
-### Logging
-
-For chat requests, logs are written to a local file in `logs/app.json`.
-
-This makes it easier to inspect one request at a time.
-
-### Password protection
-
-Saved database passwords are encrypted before storing and decrypted only when needed.
-
-### Session protection
-
-The login cookie is signed, so the backend can detect tampering.
-
-### Database structure reader
-
-Before answering data questions, the backend reads tables and columns from ClickHouse so the AI knows what it can talk about.
-
-### Health check
-
-`/health` returns a simple OK response.
-
----
-
-## 14. Real User Journey Example
-
-This is the full flow for one normal data question.
-
-```text
-User
-  ->
-Frontend
-  ->
-Backend POST /chat
-  ->
-Check session cookie
-  ->
-Load saved connection from Supabase
-  ->
-Read tables and columns from ClickHouse
-  ->
-Load recent messages from Supabase
-  ->
-Ask AI what kind of request this is
-  ->
-Ask AI to write SQL
-  ->
-Run SQL in ClickHouse
-  ->
-Ask AI for a short summary
-  ->
-Save conversation and messages in Supabase
-  ->
-Return fragments to frontend
-  ->
-Show summary, table, and SQL to user
+```
+Step 1: Schema Lookup → get table/column info
+Step 2: Dashboard Builder (needs Step 1) → plan sub-charts, generate SQL for each, build chart configs
 ```
 
----
+### Dependency handling
 
-## 15. Important Behavior To Know
+Steps declare dependencies. If Schema Lookup fails (e.g. database unreachable), the SQL Query step is skipped immediately rather than running with bad context. The user gets a clear error message instead of waiting 60 seconds for cascading timeouts.
 
-These are important truths about how your backend currently behaves.
+### Safety rules
 
-### 1. Chat is not just text chat
-
-It is a full decision system that can:
-
-- reply normally
-- answer with data
-- generate dashboards
-
-### 2. The database structure is read on each chat request
-
-Before the AI writes SQL, the backend reads the latest tables and columns from the connected database.
-
-### 3. Recent history is used for follow-up questions
-
-The AI sees recent messages when deciding intent and writing SQL.
-
-### 4. Only read-only SQL is intended
-
-The backend blocks unsafe query types and only allows select-style reading.
-
-### 5. Dashboard refresh does not ask the user again
-
-It uses the already saved queries and reruns them.
-
-### 6. Saved connection passwords are not returned to the frontend
-
-They are encrypted in storage and removed from normal API responses.
-
-### 7. There is a fallback database path
-
-If no saved user connection is found during chat, the backend can fall back to default database settings from environment values.
-
-### 8. Redis is configured but not actively used in the current flow
-
-A Redis client exists in the backend setup, but the main routes and chat flow do not currently use it.
+- Only read-only SELECT queries are allowed
+- INSERT, UPDATE, DELETE, DROP, ALTER are all blocked
+- A LIMIT of 100 rows is auto-appended if none is specified
 
 ---
 
-## 16. Backend Flow In One Short Summary
+## 5. What Happens After the Agent Finishes
 
-Your backend works like this:
+**New conversation:**
+- Backend creates a conversation record
+- A background LLM call generates a short title (e.g. _"Top Airlines Analysis"_)
 
-- Google login creates a session cookie
-- every important route checks that cookie
-- user data and app records are stored in Supabase
-- real business data is read from ClickHouse
-- Mistral AI decides whether a message is normal chat, data analysis, or a dashboard request
-- the backend turns the result into ready-made UI blocks
-- conversations, messages, and dashboards are saved for later use
-
----
-
-## 17. Route List At A Glance
-
-### Auth
-
-- `GET /auth/google/start`
-- `GET /auth/google/callback`
-- `GET /auth/me`
-- `GET /auth/logout`
-- `POST /auth/logout`
-
-### Chat
-
-- `POST /chat`
-
-### Connections
-
-- `POST /connections`
-- `GET /connections`
-- `DELETE /connections/:id`
-- `GET /connections/:id/tables`
-- `GET /connections/:id/tables/:table/columns`
-
-### Conversations
-
-- `GET /conversations`
-- `DELETE /conversations/:conversationId`
-- `GET /conversations/:conversationId/messages`
-
-### Dashboards
-
-- `POST /dashboards/save`
-- `GET /dashboards`
-- `GET /dashboards/:id`
-- `POST /dashboards/:id/refresh`
-- `DELETE /dashboards/:id`
-
-### Settings
-
-- `GET /settings`
-- `PUT /settings`
-- `GET /settings/team`
-- `POST /settings/invite`
-
-### Utility
-
-- `GET /health`
+**Then for every request:**
+- The user's message is saved
+- The assistant's response is saved along with fragments and SQL
+- The frontend receives the conversation ID and UI fragments to render
 
 ---
 
-## 18. Plain-English Final View
+## 6. Connections
 
-If we say it in the simplest way:
+Users can save their own database connections (ClickHouse or Postgres).
 
-- your backend first figures out **who the user is**
-- then it figures out **which data source to use**
-- then it figures out **what the user is really asking for**
-- then it gets the answer from **AI**, **database**, or both
-- then it saves the work in **Supabase**
-- then it sends back clean ready-to-show blocks for the frontend
+**Example:** User adds a ClickHouse Cloud connection.
 
-That is the full backend flow running in your app today.
+1. Backend validates the connection type
+2. Password is encrypted before storage
+3. Connection record is saved in Supabase
+4. Password is **never** returned to the frontend
+
+Users can also browse their connected database — list tables and columns — directly from the app.
+
+If no saved connection exists during a chat request, the backend falls back to default database settings from environment variables.
+
+---
+
+## 7. Conversations
+
+The backend stores all chat history so users can revisit past sessions.
+
+- List all conversations for the current user
+- Load all messages within a conversation (ownership is verified)
+- Delete a conversation
+
+---
+
+## 8. Dashboards
+
+Dashboards have two main flows:
+
+### Saving
+
+When the AI generates a dashboard during chat, the user can save it. The backend stores the dashboard name, description, fragments, and the underlying SQL queries.
+
+### Refreshing
+
+**Example:** User saved a dashboard last week and clicks "Refresh."
+
+1. Backend loads the saved dashboard and its queries
+2. Backend loads and decrypts the associated connection
+3. Each saved query is re-executed against ClickHouse
+4. For chart-friendly results, the AI regenerates chart configurations
+5. Dashboard is updated with fresh data
+
+The user doesn't re-ask anything — the saved queries are simply re-run.
+
+---
+
+## 9. Settings & Team
+
+- **Settings** — stores user preferences like `query_run_mode` (whether to auto-run queries or ask first)
+- **Team** — the owner can invite team members by email; invites are stored as pending until accepted
+
+---
+
+## 10. Data Stored
+
+| What | Where | Purpose |
+|---|---|---|
+| Users | `velora_users` | Created after Google login |
+| Preferences | `velora_settings` | User settings like query run mode |
+| Team invites | `velora_team_invites` | Pending or accepted invitations |
+| Connections | `velora_connections` | Saved database connections (passwords encrypted) |
+| Conversations | `velora_conversations` | Chat threads with auto-generated titles |
+| Messages | `velora_messages` | User and assistant messages with fragments and SQL |
+| Dashboards | `velora_dashboards` | Saved dashboards with fragments and queries |
+
+---
+
+## 11. Behind the Scenes
+
+- **Request tracing** — every request gets a unique `requestId` and `traceId` for structured logging
+- **LLM logging** — every AI call logs the model used, token counts, and response time
+- **Password encryption** — AES encryption for stored database passwords, decrypted only at query time
+- **Session security** — signed cookies that detect tampering
+- **Connection health checks** — schema lookup pings ClickHouse before querying to fail fast on unreachable databases
+- **Redis** — configured but not actively used in the current flow
+
+---
+
+## 12. Key Behaviors
+
+1. **Chat is not just text** — the same endpoint can reply conversationally, answer with data tables, or generate multi-chart dashboards, depending on what the user asks.
+
+2. **Schema is fetched live** — before writing SQL, the backend reads the latest tables and columns so the AI always has an accurate picture of the database.
+
+3. **Follow-ups work naturally** — the last 10 messages are passed as context, so the AI understands _"now show me just the top 3"_ after a previous query.
+
+4. **Failures are isolated** — if the database is down, dependent steps are skipped immediately and the user gets a clear error in seconds, not after a long timeout chain.
+
+5. **Dashboards stay fresh** — saved dashboards can be refreshed with one click, re-running the original queries against live data.
+
+6. **Passwords never leave the backend** — encrypted at rest, decrypted only for query execution, and stripped from all API responses.
+
+---
+
+## 13. Route Map
+
+| Area | Endpoints |
+|---|---|
+| **Auth** | `GET /auth/google/start`, `/google/callback`, `/me`, `/logout` |
+| **Chat** | `POST /chat` |
+| **Connections** | `POST /connections`, `GET /connections`, `DELETE /connections/:id`, `GET /:id/tables`, `GET /:id/tables/:table/columns` |
+| **Conversations** | `GET /conversations`, `GET /:id/messages`, `DELETE /:id` |
+| **Dashboards** | `POST /dashboards/save`, `GET /dashboards`, `GET /:id`, `POST /:id/refresh`, `DELETE /:id` |
+| **Settings** | `GET /settings`, `PUT /settings`, `GET /settings/team`, `POST /settings/invite` |
+| **Health** | `GET /health` |
