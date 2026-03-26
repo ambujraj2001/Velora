@@ -40,6 +40,7 @@ Rules:
 - Maximum ${params.maxSteps} steps
 - Use dependsOn when a step needs another step's output
 - Use {{stepId.field}} in input to reference prior step outputs
+- Set "expectedNonEmpty": false in input if the query may legitimately return zero rows
 - Return STRICT JSON only. No markdown. No explanation.`,
     ],
     ['user', params.userInput],

@@ -86,9 +86,16 @@ export async function runAgent(
       results: {},
       errors: {},
       timings: {},
+      retries: {},
+      replanCount: 0,
+      originalInput: userInput,
+      currentPlan: plan,
+      __retry: null,
+      __needsReplan: false,
     });
 
-    const stepResults = toStepResults(plan, finalState);
+    const activePlan = finalState.currentPlan ?? plan;
+    const stepResults = toStepResults(activePlan, finalState);
     let fragments = buildFragments(stepResults);
 
     const sqlResult = stepResults.find(
@@ -146,7 +153,7 @@ export async function runAgent(
       fragmentCount: fragments.length,
     });
 
-    return { plan, stepResults, fragments };
+    return { plan: activePlan, stepResults, fragments };
   } catch (err: any) {
     context.logger.error('agent_error', {
       error: err.message,

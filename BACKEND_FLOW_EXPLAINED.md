@@ -52,6 +52,9 @@ User sends message
   → Decrypt the stored password
   → Load last 10 messages for follow-up awareness
   → Hand off to the Agent
+      → Agent plans, executes, self-heals if needed
+      → Retries transient failures, replans if approach is wrong
+      → Always returns a result (data, text, or graceful error)
   → Save conversation + messages
   → Return ready-to-render UI pieces
 ```
@@ -60,15 +63,17 @@ User sends message
 
 ## 4. The Agent — How Requests Are Processed
 
-The agent replaced an older fixed-pipeline approach. Instead of hardcoded paths, it now **dynamically plans** what to do for each request.
+The agent replaced an older fixed-pipeline approach. Instead of hardcoded paths, it now **dynamically plans** what to do for each request. When things go wrong, it **heals itself** — retrying transient failures, replanning when the approach is wrong, and always returning something useful to the user.
 
 ### How it works
 
 1. **Planning** — An LLM reads the user's message and decides which tools to use and in what order. It produces a step-by-step execution plan.
 
-2. **Execution** — The plan is turned into a dependency graph. Steps run in order, and each step can use the output of a previous step. If a step fails, all steps that depend on it are skipped automatically.
+2. **Execution** — The plan is turned into a dependency graph with conditional routing. Each step can succeed, retry, trigger a replan, or fall back gracefully. Steps run in order, and each step can use the output of a previous step.
 
-3. **Assembly** — Results from each step are converted into typed UI fragments (text, tables, charts, dashboards, errors) and sent back to the frontend.
+3. **Self-Healing** — If a step fails, the agent tries it again (up to 2 retries). If retries don't help, the agent asks the LLM to create a corrected plan and executes the new plan — reusing any work that already succeeded. If everything fails, the agent returns a friendly error message instead of crashing.
+
+4. **Assembly** — Results from each step are converted into typed UI fragments (text, tables, charts, dashboards, errors) and sent back to the frontend.
 
 ### Available tools
 
@@ -105,11 +110,108 @@ Step 2: Dashboard Builder (needs Step 1) → plan sub-charts, generate SQL for e
 
 Steps declare dependencies. If Schema Lookup fails (e.g. database unreachable), the SQL Query step is skipped immediately rather than running with bad context. The user gets a clear error message instead of waiting 60 seconds for cascading timeouts.
 
+### Self-healing: retries, replanning, and fallback
+
+The agent handles failures at three levels, from smallest to largest:
+
+**Level 1 — Automatic retries (micro recovery)**
+
+If a step fails due to a transient issue (a momentary network blip, a temporary database timeout), the agent retries the same step up to 2 times before giving up. Each step also has a 30-second timeout so a hanging query never blocks the entire system.
+
+**Example:** User asks _"show me revenue by month"_
+
+```
+Step 1: Schema Lookup        → ✅ Success
+Step 2: SQL Query (needs 1)  → ❌ ClickHouse connection timed out
+  ↳ Retry 1                  → ❌ Still timing out
+  ↳ Retry 2                  → ✅ Connection recovered, query runs fine
+```
+
+The user never sees the retries — they just get their data a few seconds later than usual.
+
+**Level 2 — Dynamic replanning (macro recovery)**
+
+If retries don't fix the problem, the agent asks the LLM to create a new plan. The replanner knows what succeeded and what failed, so it can take a different approach. Crucially, it reuses work that already completed — if Schema Lookup succeeded, it won't run again.
+
+**Example:** User asks _"top airports by departures"_
+
+```
+Plan 1:
+  Step 1: Schema Lookup        → ✅ Success (found tables, columns)
+  Step 2: SQL Query (needs 1)  → ❌ Column "departures" doesn't exist
+    ↳ Retry 1                  → ❌ Same error
+    ↳ Retry 2                  → ❌ Same error
+  → Retries exhausted. Agent triggers replanning.
+
+Replan:
+  The LLM sees: "Schema Lookup succeeded, SQL Query failed because column 'departures' doesn't exist."
+  It creates a corrected plan that queries a different column or table.
+
+Plan 2 (replan):
+  Step 1: Schema Lookup        → ✅ Reused from Plan 1 (not re-run)
+  Step 2: SQL Query (needs 1)  → ✅ Corrected query runs successfully
+```
+
+The agent can replan up to 2 times. Each replan carries forward results from steps that already worked.
+
+**Example of chained recovery:** User asks _"average delivery time by region"_
+
+```
+Plan 1:
+  Step 1: Schema Lookup        → ✅ Success
+  Step 2: SQL Query (needs 1)  → ❌ Wrong table reference
+    → Retries fail → Replan triggered
+
+Plan 2 (replan 1):
+  Step 1: Schema Lookup        → ✅ Reused
+  Step 2: SQL Query (needs 1)  → ❌ Query returns 0 rows unexpectedly
+    → Agent detects bad result → Replan triggered
+
+Plan 3 (replan 2):
+  Step 1: Schema Lookup        → ✅ Reused
+  Step 2: SQL Query (needs 1)  → ✅ Third approach works, data returned
+```
+
+**Level 3 — Graceful fallback (last resort)**
+
+If all retries and replans are exhausted, the agent never crashes. It returns a friendly error message through the Chat Response tool so the user always gets a response.
+
+**Example:** Database is completely unreachable
+
+```
+Step 1: Schema Lookup        → ❌ Connection refused
+  ↳ Retry 1                  → ❌ Connection refused
+  ↳ Retry 2                  → ❌ Connection refused
+  → Replan 1                 → ❌ Schema Lookup still fails
+  → Replan 2                 → ❌ Schema Lookup still fails
+  → Replan limit reached → Fallback triggered
+  → User sees: "Sorry, something went wrong while processing your request."
+```
+
+The user gets a clear message in seconds rather than staring at a spinner that never resolves.
+
+### How routing decisions work
+
+After each step completes, the agent decides what to do next based on the outcome:
+
+```
+Step finishes
+  ├── Success?              → Move to the next step (or finish)
+  ├── Failed, retries left? → Retry the same step immediately
+  ├── Failed, retries gone? → Ask the LLM to create a new plan
+  └── Dependency failed?    → Skip this step, move on
+```
+
+If replanning itself fails (bad LLM response, limit reached), the agent routes to the fallback so the user always gets something back.
+
 ### Safety rules
 
 - Only read-only SELECT queries are allowed
 - INSERT, UPDATE, DELETE, DROP, ALTER are all blocked
 - A LIMIT of 100 rows is auto-appended if none is specified
+- Each step has a 30-second timeout to prevent hanging
+- Maximum 2 retries per step, maximum 2 replans per request
+- The agent always returns a response, even in worst-case scenarios
 
 ---
 
@@ -200,6 +302,7 @@ The user doesn't re-ask anything — the saved queries are simply re-run.
 
 - **Request tracing** — every request gets a unique `requestId` and `traceId` for structured logging
 - **LLM logging** — every AI call logs the model used, token counts, and response time
+- **Self-healing telemetry** — every retry, replan, and fallback is logged with step IDs and context so you can trace exactly what the agent tried, what failed, and how it recovered
 - **Password encryption** — AES encryption for stored database passwords, decrypted only at query time
 - **Session security** — signed cookies that detect tampering
 - **Connection health checks** — schema lookup pings ClickHouse before querying to fail fast on unreachable databases
@@ -215,11 +318,15 @@ The user doesn't re-ask anything — the saved queries are simply re-run.
 
 3. **Follow-ups work naturally** — the last 10 messages are passed as context, so the AI understands _"now show me just the top 3"_ after a previous query.
 
-4. **Failures are isolated** — if the database is down, dependent steps are skipped immediately and the user gets a clear error in seconds, not after a long timeout chain.
+4. **Failures heal themselves** — transient errors are retried automatically. If an approach is fundamentally wrong, the agent replans with a corrected strategy. If everything fails, the user gets a friendly error message in seconds — the system never hangs or crashes.
 
-5. **Dashboards stay fresh** — saved dashboards can be refreshed with one click, re-running the original queries against live data.
+5. **Work is never wasted** — when the agent replans, it keeps results from steps that already succeeded. If Schema Lookup passed but SQL Query failed, only the SQL Query is re-attempted in the new plan.
 
-6. **Passwords never leave the backend** — encrypted at rest, decrypted only for query execution, and stripped from all API responses.
+6. **Dashboards stay fresh** — saved dashboards can be refreshed with one click, re-running the original queries against live data.
+
+7. **Passwords never leave the backend** — encrypted at rest, decrypted only for query execution, and stripped from all API responses.
+
+8. **Every step has a safety net** — each tool execution has a 30-second timeout, each step gets up to 2 retries, each request allows up to 2 replans. These hard limits prevent runaway loops and guarantee the system always responds within a bounded time.
 
 ---
 
