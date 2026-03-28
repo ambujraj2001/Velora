@@ -8,6 +8,7 @@ import type {
   DashboardFragment,
   ErrorFragment,
   MarkdownFragment,
+  ReportFragment,
   TableFragment,
 } from '../types';
 import HighchartsReact from 'highcharts-react-official';
@@ -23,6 +24,10 @@ import {
   Bookmark,
   Check,
   Loader2,
+  Sparkles as SparklesIcon,
+  Download,
+  Mail,
+  CheckCircle2,
 } from 'lucide-react';
 
 import { useState } from 'react';
@@ -89,6 +94,151 @@ const HighchartsReactComp =
       [key: string]: unknown;
     }
   ).default || (HighchartsReact as React.ComponentType<HighchartsReact.Props>);
+
+const ReportFragmentView: React.FC<{ fragment: ReportFragment }> = ({
+  fragment,
+}) => {
+  const reportData = fragment.data;
+  const [emailStatus, setEmailStatus] = useState<
+    'idle' | 'loading' | 'success' | 'error'
+  >('idle');
+
+  const handleDownload = () => {
+    const link = document.createElement('a');
+    link.href = `data:application/pdf;base64,${reportData.pdfBase64}`;
+    link.download = `velora-report-${Date.now()}.pdf`;
+    link.click();
+  };
+
+  const handleEmail = async () => {
+    setEmailStatus('loading');
+    try {
+      await api.post('/chat/email-report', {
+        pdfBase64: reportData.pdfBase64,
+      });
+      setEmailStatus('success');
+      setTimeout(() => setEmailStatus('idle'), 3000);
+    } catch (err) {
+      console.error('Email failed:', err);
+      setEmailStatus('error');
+      setTimeout(() => setEmailStatus('idle'), 3000);
+    }
+  };
+
+  return (
+    <>
+      <div className="flex items-center justify-between px-8 py-6 border-b border-white/5 bg-[#111111]/80 backdrop-blur-xl sticky top-0 z-20 transition-all">
+        <div className="flex items-center gap-4">
+          <div className="p-3 rounded-2xl bg-[#F06543]/10 border border-[#F06543]/20 shadow-inner">
+            <SparklesIcon size={20} className="text-[#F06543] animate-pulse" />
+          </div>
+          <div className="flex flex-col">
+            <span className="text-[10px] font-black uppercase tracking-[0.3em] text-[#666]">
+              Velora Executive
+            </span>
+            <span className="text-sm font-bold text-white tracking-wide">
+              Strategic Insight Report
+            </span>
+          </div>
+        </div>
+        <div className="flex gap-3">
+          <button
+            onClick={handleDownload}
+            className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-white/5 text-white/70 text-[10px] font-black uppercase tracking-widest hover:bg-white/10 hover:text-white transition-all transform active:scale-95 border border-white/5"
+          >
+            <Download size={14} />
+            Download PDF
+          </button>
+          <button
+            onClick={handleEmail}
+            disabled={emailStatus === 'loading' || emailStatus === 'success'}
+            className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-white text-[10px] font-black uppercase tracking-widest transition-all transform active:scale-95 shadow-2xl border border-white/10 ${
+              emailStatus === 'success'
+                ? 'bg-emerald-500 shadow-emerald-500/20'
+                : emailStatus === 'error'
+                ? 'bg-red-500 shadow-red-500/20'
+                : 'bg-[#F06543] hover:bg-[#D45131] shadow-[#F06543]/30'
+            }`}
+          >
+            {emailStatus === 'loading' ? (
+              <Loader2 size={14} className="animate-spin" />
+            ) : emailStatus === 'success' ? (
+              <CheckCircle2 size={14} />
+            ) : (
+              <Mail size={14} />
+            )}
+            {emailStatus === 'loading'
+              ? 'Sending...'
+              : emailStatus === 'success'
+              ? 'Email Sent'
+              : emailStatus === 'error'
+              ? 'Failed'
+              : 'Email to Me'}
+          </button>
+        </div>
+      </div>
+      <div className="prose prose-sm prose-invert max-w-none text-[#BBB] leading-relaxed px-12 py-16 bg-[#0D0D0D] selection:bg-[#F06543]/40">
+        <ReactMarkdown
+          remarkPlugins={[remarkGfm]}
+          components={{
+            h1: ({ ...props }) => (
+              <h1
+                className="text-5xl font-black text-white mb-12 border-b border-white/10 pb-8 tracking-tighter"
+                {...props}
+              />
+            ),
+            h2: ({ ...props }) => (
+              <h2
+                className="text-2xl font-black text-white mb-6 mt-14 tracking-tight flex items-center gap-4 py-2 border-l-4 border-[#F06543] pl-6 bg-linear-to-r from-white/3 to-transparent"
+                {...props}
+              />
+            ),
+            h3: ({ ...props }) => (
+              <h3
+                className="text-lg font-bold text-[#F06543] mb-4 mt-10 uppercase tracking-[0.15em] border-b border-[#F06543]/10 w-fit pb-1"
+                {...props}
+              />
+            ),
+            p: ({ ...props }) => (
+              <p className="mb-6 text-[#BBB] last:mb-0 text-base leading-8 font-medium" {...props} />
+            ),
+            ul: ({ ...props }) => (
+              <ul className="list-none mb-8 space-y-4 text-[#BBB]" {...props} />
+            ),
+            li: ({ ...props }) => (
+              <li className="relative pl-8 before:content-[''] before:absolute before:left-0 before:top-3 before:w-2.5 before:h-2.5 before:bg-[#F06543]/30 before:border before:border-[#F06543]/60 before:rounded-sm" {...props} />
+            ),
+            blockquote: ({ ...props }) => (
+              <blockquote
+                className="border-l-4 border-[#F06543] pl-8 py-4 my-10 italic text-[#EEE] bg-white/3 rounded-r-2xl font-medium text-lg leading-relaxed shadow-inner"
+                {...props}
+              />
+            ),
+            table: ({ ...props }) => (
+              <div className="overflow-x-auto my-12 rounded-2xl border border-white/5 shadow-2xl bg-black/40">
+                <table className="w-full text-left border-collapse" {...props} />
+              </div>
+            ),
+            th: ({ ...props }) => (
+              <th
+                className="px-6 py-4 bg-[#1A1A1A] text-[#F06543] text-[10px] font-black uppercase tracking-widest border border-white/5"
+                {...props}
+              />
+            ),
+            td: ({ ...props }) => (
+              <td className="px-6 py-4 border border-white/5 text-[#999] text-sm font-medium" {...props} />
+            ),
+          }}
+        >
+          {reportData.markdown}
+        </ReactMarkdown>
+      </div>
+      <div className="px-10 py-8 border-t border-white/5 bg-[#0A0A0A] flex justify-between items-center text-[10px] font-bold uppercase tracking-widest text-[#444]">
+        <span>Generated by Velora Intelligence Engine</span>
+      </div>
+    </>
+  );
+};
 
 export default function FragmentRenderer({ fragment, connectionId }: Props) {
   const [saving, setSaving] = useState(false);
@@ -369,15 +519,26 @@ export default function FragmentRenderer({ fragment, connectionId }: Props) {
               </button>
             )}
           </div>
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 p-8 bg-[#080808] overflow-x-auto">
-            {dashboardData.fragments.map((subFrag: AnyFragment, idx: number) => (
-              <div
-                key={idx}
-                className="overflow-hidden rounded-2xl border border-white/5 bg-[#111] shadow-2xl transition-transform duration-300 hover:scale-[1.01] w-full"
-              >
-                <FragmentRenderer fragment={subFrag} connectionId={connectionId} />
-              </div>
-            ))}
+          <div className="w-full flex flex-col gap-6 p-8 bg-[#080808]">
+            <div className="flex items-center gap-2 text-[#F06543]">
+              <Presentation size={18} />
+              <h3 className="text-lg font-bold tracking-tight">
+                Curated Business Intelligence
+              </h3>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pb-8">
+              {dashboardData.fragments.map((f, i) => (
+                <div
+                  key={f.id || i}
+                  className="overflow-hidden rounded-2xl border border-white/5 bg-[#111] shadow-2xl transition-transform duration-300 hover:scale-[1.01] w-full"
+                >
+                  <FragmentRenderer
+                    fragment={f}
+                    connectionId={connectionId}
+                  />
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       );
@@ -386,18 +547,23 @@ export default function FragmentRenderer({ fragment, connectionId }: Props) {
     case 'error': {
       const errorData = fragment.data as ErrorFragment['data'];
       return (
-        <div className="w-full flex items-center gap-5 p-8 bg-red-500/4 border-l-4 border-red-500/60 selection:bg-red-500/20 animate-in fade-in slide-in-from-left-4 duration-500">
-          <div className="h-12 w-12 shrink-0 rounded-2xl bg-red-500/10 flex items-center justify-center shadow-lg">
-            <ShieldAlert size={24} className="text-red-500/80" />
+        <div className="w-full p-6 rounded-2xl bg-red-500/10 border border-red-500/20 flex items-start gap-4 shadow-lg shadow-red-500/5">
+          <div className="p-2 rounded-xl bg-red-500/20 text-red-400">
+            <ShieldAlert size={20} />
           </div>
-          <div className="flex flex-col gap-1">
-            <span className="text-[10px] font-black uppercase tracking-[0.2em] text-red-500/50">
-              Execution Failure
-            </span>
-            <p className="text-sm font-bold text-red-100 leading-relaxed">{errorData.message}</p>
+          <div className="flex-1 space-y-1">
+            <p className="text-[10px] font-black uppercase tracking-widest text-red-500/60">
+              System Error
+            </p>
+            <p className="text-sm font-bold text-red-100 leading-relaxed">
+              {errorData.message}
+            </p>
           </div>
         </div>
       );
+    }
+    case 'report': {
+      return <ReportFragmentView fragment={fragment as ReportFragment} />;
     }
     default:
       return (

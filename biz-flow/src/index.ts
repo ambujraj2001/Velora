@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
 import { requestContextMiddleware } from './middleware/requestContext';
@@ -21,7 +22,8 @@ app.use(
     exposedHeaders: ['x-trace-id', 'x-request-id'],
   }),
 );
-app.use(express.json());
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ limit: '50mb', extended: true }));
 app.use(requestContextMiddleware);
 
 app.use('/auth', authRoutes);

@@ -101,9 +101,16 @@ export async function runAgent(
 
     const sqlResult = stepResults.find(
       (r) =>
-        r.tool === 'sql_query' && !r.error && r.data?.rows?.length > 0,
+        (r.tool === 'sql_query' || r.tool === 'csv_query') &&
+        !r.error &&
+        r.data?.rows?.length > 0,
     );
+
+    let summaryText: string | undefined;
+    let finalData: any | undefined;
+
     if (sqlResult) {
+      finalData = sqlResult.data.rows;
       try {
         const summaryMessages = dataSummaryPrompt({
           userInput,
@@ -121,6 +128,8 @@ export async function runAgent(
         const summary =
           lines.slice(1).join(' ') ||
           'Here is the data based on your request.';
+
+        summaryText = `${heading}: ${summary}`;
 
         fragments.unshift({
           id: uuidv4(),
@@ -154,7 +163,13 @@ export async function runAgent(
       fragmentCount: fragments.length,
     });
 
-    return { plan: activePlan, stepResults, fragments };
+    return { 
+      plan: activePlan, 
+      stepResults, 
+      fragments, 
+      summary: summaryText, 
+      finalData 
+    };
   } catch (err: any) {
     context.logger.error('agent_error', {
       error: err.message,

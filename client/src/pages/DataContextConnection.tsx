@@ -13,6 +13,7 @@ interface Connection {
   id: string;
   name: string;
   type: string;
+  description?: string;
 }
 
 type Tab = 'overview' | 'tables' | 'metrics' | 'queries';
@@ -114,11 +115,11 @@ const DataContextConnection: React.FC = () => {
 
       {/* Tab Content */}
       {tab === 'overview' && (
-        <div className="space-y-6 max-w-2xl">
+        <div className="space-y-6 max-w-2xl animate-in fade-in slide-in-from-bottom-2 duration-500">
           <div>
-            <h3 className="mb-2 text-sm font-semibold text-[#888]">Description</h3>
-            <div className="rounded-lg border border-[#1A1A1A] bg-[#0D0D0D] px-4 py-3 text-sm text-[#555]">
-              No description yet.
+            <h3 className="mb-2 text-sm font-semibold text-[#888] uppercase tracking-wider text-[11px]">Description</h3>
+            <div className="rounded-xl border border-[#1A1A1A] bg-[#0D0D0D] p-6 text-[15px] leading-relaxed text-[#BBB] shadow-inner font-medium">
+              {connection?.description || 'No description yet.'}
             </div>
           </div>
           <div>

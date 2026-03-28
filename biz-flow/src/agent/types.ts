@@ -45,4 +45,6 @@ export interface AgentResult {
   plan: AgentPlan;
   stepResults: StepResult[];
   fragments: AnyFragment[];
+  summary?: string;
+  finalData?: any;
 }

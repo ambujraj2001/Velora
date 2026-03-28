@@ -109,6 +109,17 @@ export default function Conversation() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, loading]);
 
+  const [mode, setMode] = useState<'chat' | 'report'>(
+    (localStorage.getItem('velora_mode') as 'chat' | 'report') || 'chat'
+  );
+
+  const updateMode = (newMode: 'chat' | 'report') => {
+    setMode(newMode);
+    localStorage.setItem('velora_mode', newMode);
+  };
+
+  // ... (existing effects) ...
+
   const sendMessage = async () => {
     if (!input.trim() || loading || !id) return;
 
@@ -128,19 +139,18 @@ export default function Conversation() {
       const res = await api.post('/chat', {
         conversationId: id,
         userInput: userMsg,
+        mode,
       });
 
       if (res.data.connectionId) setConnectionId(res.data.connectionId);
 
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: `${Date.now()}-assistant`,
-          role: 'assistant',
-          content: res.data.content || '',
-          fragments: res.data.fragments || [],
-        },
-      ]);
+      const assistantMsg: Message = {
+        id: `${Date.now()}-assistant`,
+        role: 'assistant',
+        content: res.data.content || '',
+        fragments: res.data.fragments || [],
+      };
+      setMessages((prev) => [...prev, assistantMsg]);
     } catch (err) {
       console.error(err);
       setMessages((prev) => [
@@ -249,9 +259,9 @@ export default function Conversation() {
               e.preventDefault();
               sendMessage();
             }}
-            className="w-full"
+            className="w-full flex flex-col items-center"
           >
-            <div className="relative flex items-center gap-2 rounded-2xl border border-[#333] bg-[#141414] p-2 pr-3 shadow-2xl focus-within:border-[#F06543]/50 transition-all">
+            <div className="relative w-full flex items-center gap-2 rounded-2xl border border-[#333] bg-[#141414] p-2 pr-3 shadow-2xl focus-within:border-[#F06543]/50 transition-all">
               <textarea
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
@@ -261,20 +271,54 @@ export default function Conversation() {
                     sendMessage();
                   }
                 }}
-                placeholder="Ask follow-up questions..."
+                placeholder={
+                  mode === 'report'
+                    ? 'What analysis should the report focus on?'
+                    : 'Ask follow-up questions...'
+                }
                 className="max-h-48 flex-1 resize-none bg-transparent p-3 text-sm text-white outline-none placeholder:text-[#444]"
                 rows={1}
                 disabled={loading}
               />
-              <button
-                type="submit"
-                disabled={loading || !input.trim()}
-                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#F06543] text-white transition-all hover:bg-[#D45131] disabled:opacity-20 transform active:scale-95"
-              >
-                <Send size={18} strokeWidth={2.5} />
-              </button>
+
+              <div className="flex items-center gap-2">
+                {/* Mode Toggle */}
+                <div className="flex items-center bg-[#1A1A1A] p-0.5 rounded-xl border border-white/5 font-black shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => updateMode('chat')}
+                    className={`px-3 py-1.5 rounded-lg text-[9px] uppercase tracking-widest transition-all ${
+                      mode === 'chat'
+                        ? 'bg-[#F06543] text-white shadow-lg'
+                        : 'text-[#444] hover:text-[#777]'
+                    }`}
+                  >
+                    Chat
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => updateMode('report')}
+                    className={`px-3 py-1.5 rounded-lg text-[9px] uppercase tracking-widest transition-all ${
+                      mode === 'report'
+                        ? 'bg-[#F06543] text-white shadow-lg'
+                        : 'text-[#444] hover:text-[#777]'
+                    }`}
+                  >
+                    Report
+                  </button>
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={loading || !input.trim()}
+                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#F06543] text-white transition-all hover:bg-[#D45131] disabled:opacity-20 transform active:scale-95"
+                >
+                  <Send size={18} strokeWidth={2.5} />
+                </button>
+              </div>
             </div>
-            <div className="mt-3 text-center text-[10px] text-[#444] uppercase tracking-widest font-bold">
+            <div className="mt-4 text-center text-[10px] text-[#444] uppercase tracking-widest font-bold flex items-center gap-2">
+              <Sparkles size={10} className="text-[#F06543]" />
               Powered by Velora Intelligence
             </div>
           </form>

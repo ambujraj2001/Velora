@@ -92,7 +92,14 @@ const DataContext: React.FC = () => {
                 </span>
                 <ChevronRight size={14} className="text-[#444] opacity-0 group-hover:opacity-100 transition-opacity" />
               </div>
-              <span className="text-sm text-[#555]">{conn.description || 'No description yet.'}</span>
+              <div className="relative max-h-[100px] overflow-hidden pr-4 group-hover:pr-2 transition-all">
+                <span className="text-[13px] leading-relaxed text-[#888] block">
+                  {conn.description || 'No description yet.'}
+                </span>
+                {conn.description && conn.description.length > 200 && (
+                  <div className="absolute bottom-0 left-0 right-0 h-12 bg-linear-to-t from-[#0D0D0D] group-hover:from-[#141414] to-transparent pointer-events-none transition-colors" />
+                )}
+              </div>
             </div>
           ))
         )}

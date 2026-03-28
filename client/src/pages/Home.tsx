@@ -9,6 +9,14 @@ const Home: React.FC = () => {
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
+  const [mode, setMode] = useState<'chat' | 'report'>(
+    (localStorage.getItem('velora_mode') as 'chat' | 'report') || 'chat'
+  );
+
+  const toggleMode = (newMode: 'chat' | 'report') => {
+    setMode(newMode);
+    localStorage.setItem('velora_mode', newMode);
+  };
 
   const handleSubmit = async (e?: React.FormEvent) => {
     e?.preventDefault();
@@ -18,6 +26,7 @@ const Home: React.FC = () => {
     try {
       const res = await api.post('/chat', {
         userInput: input,
+        mode,
       });
       const convId = res.data.conversationId;
       if (convId) {
@@ -92,17 +101,45 @@ const Home: React.FC = () => {
                   <Sparkles size={14} className="text-[#F06543]/50" />
                   Type natural language or SQL
                 </div>
-                <button
-                  type="submit"
-                  disabled={loading || !input.trim()}
-                  className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#F06543] text-white transition-all transform hover:scale-105 hover:bg-[#D45131] active:scale-95 disabled:opacity-20 disabled:hover:scale-100 shadow-2xl shadow-[#F06543]/20"
-                >
-                  {loading ? (
-                    <div className="h-6 w-6 animate-spin rounded-full border-2 border-white/20 border-t-white" />
-                  ) : (
-                    <ArrowUp size={24} strokeWidth={3} />
-                  )}
-                </button>
+                <div className="flex items-center gap-4">
+                  {/* Mode Toggle */}
+                  <div className="flex items-center bg-[#181818] p-1 rounded-xl border border-white/5 font-black shadow-inner">
+                    <button
+                      type="button"
+                      onClick={() => toggleMode('chat')}
+                      className={`px-4 py-2 rounded-lg text-[10px] uppercase tracking-widest transition-all ${
+                        mode === 'chat'
+                          ? 'bg-[#F06543] text-white shadow-lg'
+                          : 'text-[#444] hover:text-white'
+                      }`}
+                    >
+                      Chat
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => toggleMode('report')}
+                      className={`px-4 py-2 rounded-lg text-[10px] uppercase tracking-widest transition-all ${
+                        mode === 'report'
+                          ? 'bg-[#F06543] text-white shadow-lg'
+                          : 'text-[#444] hover:text-white'
+                      }`}
+                    >
+                      Report
+                    </button>
+                  </div>
+
+                  <button
+                    type="submit"
+                    disabled={loading || !input.trim()}
+                    className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#F06543] text-white transition-all transform hover:scale-105 hover:bg-[#D45131] active:scale-95 disabled:opacity-20 disabled:hover:scale-100 shadow-2xl shadow-[#F06543]/20"
+                  >
+                    {loading ? (
+                      <div className="h-6 w-6 animate-spin rounded-full border-2 border-white/20 border-t-white" />
+                    ) : (
+                      <ArrowUp size={24} strokeWidth={3} />
+                    )}
+                  </button>
+                </div>
               </div>
             </div>
           </form>

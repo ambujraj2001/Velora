@@ -17,9 +17,9 @@ export const handleChat = async (req: any, res: any) => {
     const user = requireSessionUser(req, res);
     if (!user) return;
 
-    const { userInput, conversationId, connectionId } = req.body;
+    const { userInput, conversationId, connectionId, mode = 'chat' } = req.body;
 
-    // --- Connection fetching (Phase 6: Auto-selection) ---
+    // ... (unchanged connection selecting logic) ...
     let finalConnId = connectionId;
 
     if (!finalConnId) {
@@ -94,7 +94,7 @@ export const handleChat = async (req: any, res: any) => {
       if (msgs) history = msgs;
     }
 
-    // --- Run agent (replaces graph) ---
+    // --- Step 1 - Existing execution (replaces graph) ---
     const agentResult = await runAgent(userInput, {
       traceId,
       requestId,
@@ -111,6 +111,31 @@ export const handleChat = async (req: any, res: any) => {
       fragmentCount: agentResult.fragments.length,
     });
 
+    // --- Step 2 - Report mode branch ---
+    if (mode === 'report') {
+      const { runReportFlow } = require('../services/reportService');
+      const reportResult = await runReportFlow({
+        query: userInput,
+        userId: user.userId,
+        userEmail: user.email,
+        agentResult,
+      });
+
+      // ONLY include the report fragment in report mode for a clean business experience
+      const reportFragment = {
+        id: `report-${Date.now()}`,
+        type: 'report',
+        data: {
+          markdown: reportResult.reportMarkdown,
+          pdfBase64: reportResult.pdfBase64,
+          actions: reportResult.actions,
+        },
+      };
+
+      // Persist ONLY the report fragment for this message
+      agentResult.fragments = [reportFragment as any];
+    }
+
     // Extract SQL from step results for persistence
     const sqlStep = agentResult.stepResults.find(
       (r) => (r.tool === 'sql_query' || r.tool === 'csv_query') && !r.error,
@@ -118,6 +143,7 @@ export const handleChat = async (req: any, res: any) => {
 
     // --- Supabase persistence (unchanged) ---
     let convId = conversationId;
+    // ... insert conversation and messages if chat mode ...
     if (!convId) {
       logger.info('conversation_creating', { userId: user.userId });
       const { data: conv, error: convError } = await supabase
@@ -192,6 +218,27 @@ export const handleChat = async (req: any, res: any) => {
       error: err.message,
       stack: err.stack,
     });
+    res.status(500).json({ error: err.message });
+  }
+};
+
+export const handleEmailReport = async (req: any, res: any) => {
+  const { logger } = req.context;
+  try {
+    const user = requireSessionUser(req, res);
+    if (!user) return;
+
+    const { pdfBase64 } = req.body;
+    if (!pdfBase64) return res.status(400).json({ error: 'pdfBase64 is required' });
+
+    const { sendReportEmail } = require('../services/reportService');
+    const pdfBuffer = Buffer.from(pdfBase64, 'base64');
+    
+    await sendReportEmail(user.email, pdfBuffer);
+    
+    res.status(200).json({ success: true });
+  } catch (err: any) {
+    logger.error('handleEmailReport_error', { error: err.message });
     res.status(500).json({ error: err.message });
   }
 };

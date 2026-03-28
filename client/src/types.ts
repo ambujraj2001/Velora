@@ -1,4 +1,12 @@
-export type FragmentType = 'md' | 'table' | 'chart' | 'list' | 'code' | 'dashboard' | 'error';
+export type FragmentType =
+  | 'md'
+  | 'table'
+  | 'chart'
+  | 'list'
+  | 'code'
+  | 'dashboard'
+  | 'error'
+  | 'report';
 
 export type BaseFragment<T> = {
   id: string;
@@ -25,6 +33,14 @@ export type DashboardFragment = BaseFragment<{
   originalPrompt?: string;
 }>;
 export type ErrorFragment = BaseFragment<{ message: string }>;
+export type ReportFragment = BaseFragment<{
+  markdown: string;
+  pdfBase64: string;
+  actions: {
+    canDownload: boolean;
+    canEmail: boolean;
+  };
+}>;
 
 export type AnyFragment =
   | MarkdownFragment
@@ -32,7 +48,8 @@ export type AnyFragment =
   | ChartFragment
   | CodeFragment
   | DashboardFragment
-  | ErrorFragment;
+  | ErrorFragment
+  | ReportFragment;
 
 export interface GraphState {
   userInput: string;

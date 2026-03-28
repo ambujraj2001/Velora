@@ -1,4 +1,12 @@
-export type FragmentType = 'md' | 'table' | 'chart' | 'list' | 'code' | 'dashboard' | 'error';
+export type FragmentType =
+  | 'md'
+  | 'table'
+  | 'chart'
+  | 'list'
+  | 'code'
+  | 'dashboard'
+  | 'error'
+  | 'report';
 
 export type ConnectionType = 'postgres' | 'clickhouse' | 'csv';
 
@@ -27,6 +35,14 @@ export type DashboardFragment = BaseFragment<{
   originalPrompt?: string;
 }>;
 export type ErrorFragment = BaseFragment<{ message: string }>;
+export type ReportFragment = BaseFragment<{
+  markdown: string;
+  pdfBase64: string;
+  actions: {
+    canDownload: boolean;
+    canEmail: boolean;
+  };
+}>;
 
 export type AnyFragment =
   | MarkdownFragment
@@ -34,7 +50,8 @@ export type AnyFragment =
   | ChartFragment
   | CodeFragment
   | DashboardFragment
-  | ErrorFragment;
+  | ErrorFragment
+  | ReportFragment;
 
 export type IntentData = 'CHAT' | 'DATA_QUERY' | 'DASHBOARD';
 
