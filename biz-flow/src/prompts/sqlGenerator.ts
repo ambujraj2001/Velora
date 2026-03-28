@@ -15,6 +15,7 @@ Rules:
 3. Use the provided schema.
 4. If a query is a follow-up, consider the history.
 5. Limit results to 100 unless specified.
+6. DO NOT use semicolons (;) at the end of the query.
 
 Schema:
 ${params.schemaContext}`,

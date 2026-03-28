@@ -1,5 +1,6 @@
 import { Database } from 'duckdb-async';
 import { supabase } from '../config/db';
+import { indexConnection } from './connectionEmbeddingService';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -113,6 +114,18 @@ export async function createCsvConnection(
     logger.error('csv_connection_save_error', { error: error.message, name });
     throw new Error(`Supabase insert failed: ${error.message}`);
   }
+
+  // 3. Generate and store embeddings (async with sample rows)
+  (async () => {
+    try {
+      const samples = await sampleCsvRows(file_url, 3);
+      await indexConnection(data, logger, samples);
+    } catch (e: any) {
+      logger.error('async_csv_indexing_failed', { error: e.message, connectionId: data.id });
+      // Fallback to indexing without samples if sampling fails
+      await indexConnection(data, logger);
+    }
+  })();
 
   return data;
 }

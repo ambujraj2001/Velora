@@ -53,6 +53,7 @@ export async function planner(
     toolDescriptions,
     maxSteps: MAX_STEPS,
     userInput: input,
+    connectionType: context.connectionSettings?.type || 'unknown',
   });
 
   const response = await invokeWithLogging(

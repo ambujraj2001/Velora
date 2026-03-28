@@ -173,26 +173,6 @@ export default function FragmentRenderer({ fragment, connectionId }: Props) {
                 {fragment.name || 'Result Dataset'}
               </span>
             </div>
-            {connectionId && (
-              <button
-                onClick={() => handleSaveDashboard(fragment.name || 'Table', [fragment])}
-                disabled={saving || saved}
-                className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-widest transition-all ${
-                  saved
-                    ? 'bg-green-500/10 text-green-500 cursor-default'
-                    : 'bg-white/5 hover:bg-[#F06543]/20 text-[#666] hover:text-[#F06543] active:scale-95'
-                }`}
-              >
-                {saved ? (
-                  <Check size={12} />
-                ) : saving ? (
-                  <Loader2 size={12} className="animate-spin" />
-                ) : (
-                  <Bookmark size={12} />
-                )}
-                {saved ? 'Saved!' : saving ? 'Saving...' : 'Save to Library'}
-              </button>
-            )}
           </div>
           <CollapsibleWrapper threshold={10} currentCount={tableData.rows.length} label="Rows">
             <div className="overflow-x-auto bg-[#0A0A0A]">
@@ -341,26 +321,6 @@ export default function FragmentRenderer({ fragment, connectionId }: Props) {
                 {fragment.name || 'Visual Insight Analytics'}
               </span>
             </div>
-            {connectionId && (
-              <button
-                onClick={() => handleSaveDashboard(fragment.name || 'Chart', [fragment])}
-                disabled={saving || saved}
-                className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-widest transition-all ${
-                  saved
-                    ? 'bg-green-500/10 text-green-500 cursor-default'
-                    : 'bg-white/5 hover:bg-[#F06543]/20 text-[#666] hover:text-[#F06543] active:scale-95'
-                }`}
-              >
-                {saved ? (
-                  <Check size={12} />
-                ) : saving ? (
-                  <Loader2 size={12} className="animate-spin" />
-                ) : (
-                  <Bookmark size={12} />
-                )}
-                {saved ? 'Saved!' : saving ? 'Saving...' : 'Save to Library'}
-              </button>
-            )}
           </div>
           <div className="p-8 bg-[#0D0D0D] overflow-x-auto">
             <div className="min-w-100">

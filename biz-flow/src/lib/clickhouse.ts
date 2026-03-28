@@ -1,6 +1,6 @@
 import { createClient } from '@clickhouse/client';
 
-const REQUEST_TIMEOUT_MS = 30_000;
+const REQUEST_TIMEOUT_MS = 60_000;
 
 export const getClickhouseClient = (settings?: {
   host?: string;

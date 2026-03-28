@@ -40,7 +40,8 @@ function buildFragments(stepResults: StepResult[]): AnyFragment[] {
         }
         break;
       }
-      case 'dashboard_builder': {
+      case 'dashboard_builder':
+      case 'csv_query': {
         if (result.data.fragments) {
           fragments.push(...result.data.fragments);
         }

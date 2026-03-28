@@ -33,7 +33,9 @@ export const sqlQueryTool: Tool = {
     sql = sql
       .replace(/^```sql\n?/, '')
       .replace(/^```\n?/, '')
-      .replace(/\n?```$/, '');
+      .replace(/\n?```$/, '')
+      .replace(/;+$/, '')
+      .trim();
 
     const upper = sql.toUpperCase();
     if (

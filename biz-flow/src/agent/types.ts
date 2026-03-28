@@ -19,11 +19,15 @@ export interface AgentContext {
   userId?: string;
   userInput: string;
   connectionSettings?: {
+    type?: string;
     host?: string;
     port?: number;
     database?: string;
     username?: string;
     password?: string;
+    file_url?: string;
+    schema_json?: any;
+    description?: string;
   };
   connectionId?: string;
   history?: Array<{ role: 'user' | 'assistant'; content: string }>;

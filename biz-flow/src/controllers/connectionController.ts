@@ -4,6 +4,7 @@ import dotenv from 'dotenv';
 import type { ConnectionType } from '../types';
 import { requireSessionUser } from '../utils/auth';
 import { getClickhouseClient } from '../lib/clickhouse';
+import { indexConnection } from '../services/connectionEmbeddingService';
 dotenv.config();
 
 const ENCRYPTION_KEY = process.env.ENCRYPTION_KEY || '12345678123456781234567812345678'; // 32 bytes
@@ -24,7 +25,7 @@ export const addConnection = async (req: any, res: any) => {
     const user = requireSessionUser(req, res);
     if (!user) return;
 
-    const { name, type, host, port, database, username, password } = req.body;
+    const { name, type, host, port, database, username, password, description } = req.body;
     const normalizedType = String(type || '').toLowerCase() as ConnectionType;
     if (!CONNECTION_TYPES.includes(normalizedType)) {
       return res.status(400).json({
@@ -34,6 +35,19 @@ export const addConnection = async (req: any, res: any) => {
     const encPassword = encrypt(password);
 
     logger.info('connection_creating', { name, type: normalizedType });
+
+    // --- Proactive Connectivity Check (Phase 1) ---
+    if (normalizedType !== 'csv') {
+      try {
+        const client = getClickhouseClient({ host, port, database, username, password });
+        const pinged = await client.ping();
+        if (!pinged.success) throw new Error('Could not ping database.');
+        await client.close();
+      } catch (err: any) {
+        logger.error('connection_validation_failed', { error: err.message });
+        return res.status(400).json({ error: `Connection failed: ${err.message}` });
+      }
+    }
 
     const { data, error } = await supabase
       .from('velora_connections')
@@ -46,11 +60,34 @@ export const addConnection = async (req: any, res: any) => {
         database,
         username,
         password: encPassword,
+        description: (description || '').trim(),
       })
       .select()
       .single();
 
     if (error) throw error;
+
+    // Trigger indexing (async with schema fetch for SQL)
+    (async () => {
+      try {
+        let schemaContext = '';
+        if (normalizedType !== 'csv') {
+          const { decrypt } = require('../utils/crypto');
+          const settings = {
+            host,
+            port,
+            database,
+            username,
+            password: decrypt(encPassword),
+          };
+          const { fetchSchema } = require('../services/schemaService');
+          schemaContext = await fetchSchema(settings);
+        }
+        await indexConnection(data, logger, [], schemaContext);
+      } catch (e: any) {
+        logger.error('async_sql_indexing_failed', { error: e.message, connectionId: data.id });
+      }
+    })();
 
     const { password: _, ...rest } = data;
     res.json(rest);
@@ -68,7 +105,7 @@ export const getConnections = async (req: any, res: any) => {
 
     const { data, error } = await supabase
       .from('velora_connections')
-      .select('id, user_id, name, type, host, port, database, username, created_at')
+      .select('id, user_id, name, type, host, port, database, username, description, created_at')
       .eq('user_id', user.userId)
       .order('created_at', { ascending: false });
 
@@ -215,4 +252,3 @@ export const getConnectionTableColumns = async (req: any, res: any) => {
     res.status(500).json({ error: err.message });
   }
 };
-
