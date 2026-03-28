@@ -139,6 +139,7 @@ export default function Conversation() {
       const res = await api.post('/chat', {
         conversationId: id,
         userInput: userMsg,
+        connectionId, // Pin context for follow-up
         mode,
       });
 

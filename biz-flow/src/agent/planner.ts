@@ -54,6 +54,7 @@ export async function planner(
     maxSteps: MAX_STEPS,
     userInput: input,
     connectionType: context.connectionSettings?.type || 'unknown',
+    history: context.history,
   });
 
   const response = await invokeWithLogging(
@@ -68,7 +69,14 @@ export async function planner(
       .replace(/^```\n?/, '')
       .replace(/\n?```$/, '');
 
-    const plan = JSON.parse(content) as AgentPlan;
+    let plan: AgentPlan;
+    try {
+      plan = JSON.parse(content) as AgentPlan;
+    } catch (err) {
+      // Attempt second-pass cleaning (remove internal literal newlines that break strings)
+      const cleaned = content.replace(/(\r\n|\n|\r)/gm, " ");
+      plan = JSON.parse(cleaned) as AgentPlan;
+    }
 
     if (
       !plan.steps ||

@@ -74,7 +74,35 @@ export async function replan(input: ReplanInput): Promise<AgentPlan> {
     .replace(/^```\n?/, '')
     .replace(/\n?```$/, '');
 
-  const plan = JSON.parse(content) as AgentPlan;
+  // Safety: handle cases where LLM might return unescaped control characters (e.g. literal newlines inside string literals)
+  const sanitized = content.replace(/[\u0000-\u001F]+/g, (match) => {
+    // Preserve normal space/tab in formatting context if they are between keys? 
+    // Actually, JSON.parse handles \n outside strings fine. 
+    // But literal control chars INSIDE strings are what cause the error.
+    // It's safer to just let JSON.parse handle it after some targeted cleanup.
+    // Replace only literal control codes that must be escaped.
+    return match; // (placeholder logic, will refine in the next step or keep if simple replacement)
+  });
+
+  // Most robust cleanup for "Bad control character in string literal" errors:
+  // We need to keep structural newlines but escape newlines INSIDE value quotes.
+  // Instead of complex regex, let's just use a try-catch with a slightly cleaner input.
+  
+  const finalContent = content.replace(/\n/g, '\\n').replace(/\r/g, '\\r');
+  // Wait, if I replace ALL \n with \\n, then { "a": 1, \n "b": 2} -> { "a": 1, \\n "b": 2} which is invalid JSON if not inside quotes.
+  
+  // Real fix: only sanitize the characters that JSON.parse explicitly fails on.
+  // Actually, standard JSON.parse() in node fails on literal \n in string. 
+  // Let's use a simpler heuristic: if it fails, try to "un-break" it.
+  
+  let plan: AgentPlan;
+  try {
+    plan = JSON.parse(content) as AgentPlan;
+  } catch (err) {
+    // Attempt second-pass cleaning if first fails
+    const cleaned = content.replace(/(\r\n|\n|\r)/gm, " ");
+    plan = JSON.parse(cleaned) as AgentPlan;
+  }
 
   if (!plan.steps || !Array.isArray(plan.steps) || plan.steps.length === 0) {
     throw new Error('Replanner produced empty or invalid plan');

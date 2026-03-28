@@ -5,8 +5,9 @@ export function plannerPrompt(params: {
   maxSteps: number;
   userInput: string;
   connectionType: string;
+  history?: { role: string; content: string }[];
 }): PromptMessages {
-  return [
+  const messages: PromptMessages = [
     [
       'system',
       `You are a data analytics agent planner. Given a user query and connection information, produce a JSON execution plan.
@@ -37,6 +38,16 @@ Rules:
 - Use {{stepId.field}} for data piping.
 - Return STRICT JSON only.`,
     ],
-    ['user', params.userInput],
   ];
+
+  if (params.history && params.history.length > 0) {
+    for (const msg of params.history) {
+      if (!msg.content?.trim()) continue; // Skip empty or whitespace-only messages
+      messages.push([msg.role as any, msg.content]);
+    }
+  }
+
+  messages.push(['user', params.userInput]);
+
+  return messages;
 }
