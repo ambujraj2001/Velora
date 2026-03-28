@@ -104,25 +104,14 @@ export const deleteConnection = async (req: any, res: any) => {
 };
 
 // Helper: load and decrypt a connection by ID for the authed user
-async function loadConnectionSettings(userId: string, connId: string) {
+async function loadConnection(userId: string, connId: string) {
   const { data: conn } = await supabase
     .from('velora_connections')
     .select('*')
     .eq('id', connId)
     .eq('user_id', userId)
     .single();
-  if (!conn) return null;
-  const { decrypt } = require('../utils/crypto');
-  return {
-    conn,
-    settings: {
-      host: conn.host,
-      port: conn.port,
-      database: conn.database,
-      username: conn.username,
-      password: decrypt(conn.password),
-    },
-  };
+  return conn;
 }
 
 export const getConnectionTables = async (req: any, res: any) => {
@@ -132,18 +121,34 @@ export const getConnectionTables = async (req: any, res: any) => {
     if (!user) return;
 
     const { id } = req.params;
-    const loaded = await loadConnectionSettings(user.userId, id);
-    if (!loaded) return res.status(404).json({ error: 'Connection not found.' });
+    const conn = await loadConnection(user.userId, id);
+    if (!conn) return res.status(404).json({ error: 'Connection not found.' });
+
+    if (conn.type === 'csv') {
+      return res.json([{
+        name: 'data',
+        database: 'duckdb'
+      }]);
+    }
+
+    const { decrypt } = require('../utils/crypto');
+    const settings = {
+      host: conn.host,
+      port: conn.port,
+      database: conn.database,
+      username: conn.username,
+      password: decrypt(conn.password),
+    };
 
     logger.info('db_query', { tool: 'clickhouse', query: 'SHOW TABLES', connectionId: id });
 
-    const client = getClickhouseClient(loaded.settings);
+    const client = getClickhouseClient(settings);
     try {
       const result = await client.query({ query: 'SHOW TABLES', format: 'JSONEachRow' });
       const rows = (await result.json()) as Array<{ name: string }>;
       const tables = rows.map((r) => ({
         name: r.name,
-        database: loaded.conn.database || 'default',
+        database: conn.database || 'default',
       }));
       res.json(tables);
     } finally {
@@ -162,12 +167,34 @@ export const getConnectionTableColumns = async (req: any, res: any) => {
     if (!user) return;
 
     const { id, table } = req.params;
-    const loaded = await loadConnectionSettings(user.userId, id);
-    if (!loaded) return res.status(404).json({ error: 'Connection not found.' });
+    const conn = await loadConnection(user.userId, id);
+    if (!conn) return res.status(404).json({ error: 'Connection not found.' });
+
+    if (conn.type === 'csv') {
+      if (table !== 'data') return res.status(404).json({ error: 'Table not found for CSV.' });
+      
+      const schema = (conn.schema_json as any);
+      const columns = (schema?.columns || []).map((c: any) => ({
+        name: c.name,
+        type: c.type,
+        default_type: '',
+        comment: ''
+      }));
+      return res.json(columns);
+    }
+
+    const { decrypt } = require('../utils/crypto');
+    const settings = {
+      host: conn.host,
+      port: conn.port,
+      database: conn.database,
+      username: conn.username,
+      password: decrypt(conn.password),
+    };
 
     logger.info('db_query', { tool: 'clickhouse', query: 'DESCRIBE TABLE', table, connectionId: id });
 
-    const client = getClickhouseClient(loaded.settings);
+    const client = getClickhouseClient(settings);
     try {
       const result = await client.query({
         query: `DESCRIBE TABLE \`${table}\``,

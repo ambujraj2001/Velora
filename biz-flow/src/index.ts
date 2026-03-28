@@ -7,6 +7,7 @@ import conversationRoutes from './routes/conversations';
 import dashboardRoutes from './routes/dashboard';
 import authRoutes from './routes/auth';
 import settingsRoutes from './routes/settings';
+import queryRoutes from './routes/query';
 import { log } from './lib/logger';
 
 const app = express();
@@ -29,6 +30,7 @@ app.use('/connections', connectionRoutes);
 app.use('/conversations', conversationRoutes);
 app.use('/dashboards', dashboardRoutes);
 app.use('/settings', settingsRoutes);
+app.use('/query', queryRoutes);
 
 app.get('/health', (_req, res) => {
   res.status(200).send('OK');

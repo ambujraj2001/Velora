@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Database, Cloud } from 'lucide-react';
+import { Database, Cloud, FileText } from 'lucide-react';
 import { api } from '../lib/appConfig';
 import Layout from '../components/Layout';
 
@@ -32,6 +32,7 @@ const DataSources: React.FC = () => {
 
   const availableSources = [
     { type: 'ClickHouse', icon: <Database />, color: '#F06543' },
+    { type: 'CSV', icon: <FileText />, color: '#10B981' },
     { type: 'Snowflake', icon: <Cloud />, color: '#29B6F6' },
     { type: 'PostgreSQL', icon: <Database />, color: '#336791' },
   ];
@@ -124,7 +125,7 @@ const DataSources: React.FC = () => {
         </h2>
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {availableSources.map((source) => {
-            const isSupported = source.type === 'ClickHouse';
+            const isSupported = source.type === 'ClickHouse' || source.type === 'CSV';
             return (
               <button
                 key={source.type}

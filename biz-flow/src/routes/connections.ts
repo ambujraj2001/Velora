@@ -6,9 +6,14 @@ import {
   getConnectionTables,
   getConnectionTableColumns,
 } from '../controllers/connectionController';
+import { addCsvConnection } from '../controllers/csvConnectionController';
 
 const router = Router();
 
+// ── CSV connections ────────────────────────────────────────────────────────
+router.post('/csv', addCsvConnection);
+
+// ── DB connections (postgres / clickhouse) ────────────────────────────────
 router.post('/', addConnection);
 router.get('/', getConnections);
 router.delete('/:id', deleteConnection);

@@ -2,6 +2,84 @@ import { runAgent } from '../agent';
 import { supabase } from '../config/db';
 import { requireSessionUser } from '../utils/auth';
 import { conversationTitlePrompt } from '../prompts';
+import { handleCsvChatAction } from '../services/csvChatService';
+
+/**
+ * Helper to process CSV queries within the chat flow.
+ * Follows the same persistence pattern as normal chat (create conv if needed, save message, return json).
+ */
+const handleCsvChat = async (req: any, res: any, params: {
+  userInput: string;
+  conversationId: string;
+  connection: any;
+  user: any;
+  history: any[];
+}) => {
+  const { logger } = req.context;
+  const { userInput, conversationId, connection, user } = params;
+
+  // 1. Run CSV execution flow
+  const csvResult = await handleCsvChatAction({
+    query: userInput,
+    connection,
+    logger
+  });
+
+  // 2. Persistence (Reuse existing pattern)
+  let convId = conversationId;
+  if (!convId) {
+    logger.info('csv_conversation_creating', { userId: user.userId });
+    const { data: conv, error: convError } = await supabase
+      .from('velora_conversations')
+      .insert({
+        user_id: user.userId,
+        title: userInput.substring(0, 50) + '...',
+      })
+      .select()
+      .single();
+
+    if (conv) {
+      convId = conv.id;
+      // Background title generation
+      const { mistral } = require('../config/llm');
+      const titleMessages = conversationTitlePrompt({ userInput });
+      mistral
+        .invoke(titleMessages)
+        .then(async (titleRes: any) => {
+          await supabase
+            .from('velora_conversations')
+            .update({ title: titleRes.content.toString() })
+            .eq('id', convId);
+        })
+        .catch((e: any) => logger.error('csv_title_generation_failed', { error: e.message }));
+    }
+  }
+
+  if (convId) {
+    await supabase.from('velora_messages').insert([
+      {
+        conversation_id: convId,
+        role: 'user',
+        content: userInput,
+        fragments: [],
+      },
+      {
+        conversation_id: convId,
+        role: 'assistant',
+        content: '',
+        fragments: csvResult.fragments,
+        sql: csvResult.sql,
+        connection_id: connection.id,
+      },
+    ]);
+  }
+
+  return res.status(200).json({
+    conversationId: convId,
+    connectionId: connection.id,
+    fragments: csvResult.fragments,
+  });
+};
 
 export const handleChat = async (req: any, res: any) => {
   const { logger, traceId, requestId } = req.context;
@@ -32,6 +110,19 @@ export const handleChat = async (req: any, res: any) => {
 
     if (conn) {
       finalConnId = conn.id;
+
+      // 🎯 ROUTING CONDITION (CORE CHANGE)
+      if (conn.type === 'csv') {
+        logger.info('routing_to_csv_flow', { connectionId: finalConnId });
+        return handleCsvChat(req, res, {
+          userInput,
+          conversationId,
+          connection: conn,
+          user,
+          history: [] // currently history not used in simple csv flow, can be added later
+        });
+      }
+
       const { decrypt } = require('../utils/crypto');
       try {
         connSettings = {

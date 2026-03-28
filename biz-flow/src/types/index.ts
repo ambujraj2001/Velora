@@ -1,6 +1,6 @@
 export type FragmentType = 'md' | 'table' | 'chart' | 'list' | 'code' | 'dashboard' | 'error';
 
-export type ConnectionType = 'postgres' | 'clickhouse';
+export type ConnectionType = 'postgres' | 'clickhouse' | 'csv';
 
 export type BaseFragment<T> = {
   id: string;

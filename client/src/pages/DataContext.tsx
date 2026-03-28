@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Grid3x3, Search, BarChart4, ChevronRight } from 'lucide-react';
+import { Grid3x3, Search, BarChart4, ChevronRight, FileText } from 'lucide-react';
 import { api } from '../lib/appConfig';
 import Layout from '../components/Layout';
 
@@ -8,8 +8,9 @@ interface Connection {
   id: string;
   name: string;
   type: string;
-  host: string;
-  database: string;
+  host?: string;
+  database?: string;
+  description?: string;
 }
 
 const DataContext: React.FC = () => {
@@ -81,13 +82,17 @@ const DataContext: React.FC = () => {
               className="grid grid-cols-[2fr_3fr] items-center px-6 py-4 border-b border-[#141414] hover:bg-[#141414] cursor-pointer group transition-colors"
             >
               <div className="flex items-center gap-3">
-                <BarChart4 size={18} className="text-[#F06543] shrink-0" />
+                {conn.type === 'csv' ? (
+                  <FileText size={18} className="text-[#10B981] shrink-0" />
+                ) : (
+                  <BarChart4 size={18} className="text-[#F06543] shrink-0" />
+                )}
                 <span className="font-semibold text-white text-sm group-hover:text-[#F06543] transition-colors">
                   {conn.name}
                 </span>
                 <ChevronRight size={14} className="text-[#444] opacity-0 group-hover:opacity-100 transition-opacity" />
               </div>
-              <span className="text-sm text-[#555]">No description yet.</span>
+              <span className="text-sm text-[#555]">{conn.description || 'No description yet.'}</span>
             </div>
           ))
         )}
