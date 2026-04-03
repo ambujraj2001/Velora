@@ -199,6 +199,12 @@ function createStepNode(step: AgentStep, context: AgentContext) {
         resolvedKeys: Object.keys(resolvedInput),
       });
 
+      context.onProgress?.({
+        kind: 'step_start',
+        stepId: step.id,
+        tool: step.tool,
+      });
+
       const result = await withTimeout(
         tool.execute(resolvedInput, context, state.results),
         STEP_TIMEOUT_MS,
@@ -222,6 +228,12 @@ function createStepNode(step: AgentStep, context: AgentContext) {
         stepId: step.id,
         tool: step.tool,
         durationMs,
+      });
+
+      context.onProgress?.({
+        kind: 'step_done',
+        stepId: step.id,
+        tool: step.tool,
       });
 
       return {
@@ -253,6 +265,13 @@ function createStepNode(step: AgentStep, context: AgentContext) {
         tool: step.tool,
         error: error.message,
         durationMs,
+      });
+
+      context.onProgress?.({
+        kind: 'step_error',
+        stepId: step.id,
+        tool: step.tool,
+        message: error.message,
       });
 
       return {
@@ -288,6 +307,8 @@ export function buildGraph(plan: AgentPlan, context: AgentContext) {
     }
 
     logger.info('agent_replan_triggered', { replanCount: state.replanCount });
+
+    context.onProgress?.({ kind: 'replanning' });
 
     let newPlan: AgentPlan;
     try {

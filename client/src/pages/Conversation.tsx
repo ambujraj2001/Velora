@@ -7,8 +7,10 @@ import type { AnyFragment } from '../types';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { api } from '../lib/appConfig';
+import { pollUntilChatJobDone, startChatJob, type ChatJobPublic } from '../lib/chatJob';
 import Layout from '../components/Layout';
 import FragmentRenderer from '../components/FragmentRenderer';
+import ChatJobProgress from '../components/ChatJobProgress';
 
 type Message = {
   id: string;
@@ -28,8 +30,10 @@ export default function Conversation() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
+  const [jobSnapshot, setJobSnapshot] = useState<ChatJobPublic | null>(null);
   const [connectionId, setConnectionId] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const pollAbortRef = useRef<AbortController | null>(null);
   const initialFragments = (location.state as LocationState | null)?.initialFragments;
 
   useEffect(() => {
@@ -106,6 +110,12 @@ export default function Conversation() {
   }, [id, initialFragments, location]);
 
   useEffect(() => {
+    return () => {
+      pollAbortRef.current?.abort();
+    };
+  }, []);
+
+  useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, loading]);
 
@@ -125,6 +135,9 @@ export default function Conversation() {
 
     const userMsg = input;
     setInput('');
+    pollAbortRef.current?.abort();
+    pollAbortRef.current = new AbortController();
+    setJobSnapshot(null);
     setLoading(true);
 
     const tempMsg: Message = {
@@ -136,24 +149,34 @@ export default function Conversation() {
     setMessages((prev) => [...prev, tempMsg]);
 
     try {
-      const res = await api.post('/chat', {
-        conversationId: id,
+      const jobId = await startChatJob({
         userInput: userMsg,
-        connectionId, // Pin context for follow-up
         mode,
+        conversationId: id,
+        connectionId,
+      });
+      const job = await pollUntilChatJobDone(jobId, {
+        intervalMs: 1000,
+        signal: pollAbortRef.current.signal,
+        onUpdate: setJobSnapshot,
       });
 
-      if (res.data.connectionId) setConnectionId(res.data.connectionId);
+      const resConn = job.result?.connectionId;
+      if (resConn) setConnectionId(resConn);
 
       const assistantMsg: Message = {
         id: `${Date.now()}-assistant`,
         role: 'assistant',
-        content: res.data.content || '',
-        fragments: res.data.fragments || [],
+        content: '',
+        fragments: job.result?.fragments || [],
       };
       setMessages((prev) => [...prev, assistantMsg]);
     } catch (err) {
+      if (err instanceof DOMException && err.name === 'AbortError') {
+        return;
+      }
       console.error(err);
+      setJobSnapshot(null);
       setMessages((prev) => [
         ...prev,
         {
@@ -161,7 +184,9 @@ export default function Conversation() {
           role: 'assistant',
           content: axios.isAxiosError(err)
             ? err.response?.data?.error || 'Failed to connect.'
-            : 'An error occurred.',
+            : err instanceof Error
+              ? err.message
+              : 'An error occurred.',
           fragments: [],
         },
       ]);
@@ -238,15 +263,18 @@ export default function Conversation() {
               <motion.div
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
-                className="flex items-start gap-3"
+                className="flex w-full max-w-2xl flex-col gap-3"
               >
-                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#222] text-[#F06543] border border-[#333]">
-                  <Sparkles size={16} className="animate-pulse" />
+                <div className="flex items-start gap-3">
+                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-[#333] bg-[#222] text-[#F06543]">
+                    <Sparkles size={16} className="animate-pulse" />
+                  </div>
+                  <div className="flex items-center gap-3 rounded-2xl border border-[#222]/50 bg-[#141414]/50 px-5 py-3 text-sm text-[#666]">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    <span>Working on your request…</span>
+                  </div>
                 </div>
-                <div className="flex items-center gap-3 rounded-2xl bg-[#141414]/50 px-5 py-3 text-sm text-[#666] border border-[#222]/50">
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  <span>Velora is thinking...</span>
-                </div>
+                <ChatJobProgress job={jobSnapshot} />
               </motion.div>
             )}
             <div ref={messagesEndRef} className="h-4" />

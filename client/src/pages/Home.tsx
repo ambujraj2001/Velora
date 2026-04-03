@@ -1,14 +1,23 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowUp, Sparkles } from 'lucide-react';
 import { motion } from 'framer-motion';
-import { api } from '../lib/appConfig';
 import Layout from '../components/Layout';
+import ChatJobProgress from '../components/ChatJobProgress';
+import { pollUntilChatJobDone, startChatJob, type ChatJobPublic } from '../lib/chatJob';
 
 const Home: React.FC = () => {
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
+  const [jobSnapshot, setJobSnapshot] = useState<ChatJobPublic | null>(null);
+  const pollAbortRef = useRef<AbortController | null>(null);
   const navigate = useNavigate();
+
+  useEffect(() => {
+    return () => {
+      pollAbortRef.current?.abort();
+    };
+  }, []);
   const [mode, setMode] = useState<'chat' | 'report'>(
     (localStorage.getItem('velora_mode') as 'chat' | 'report') || 'chat'
   );
@@ -22,23 +31,36 @@ const Home: React.FC = () => {
     e?.preventDefault();
     if (!input.trim() || loading) return;
 
+    pollAbortRef.current?.abort();
+    pollAbortRef.current = new AbortController();
+    setJobSnapshot(null);
     setLoading(true);
+
     try {
-      const res = await api.post('/chat', {
+      const jobId = await startChatJob({
         userInput: input,
         mode,
       });
-      const convId = res.data.conversationId;
+      const job = await pollUntilChatJobDone(jobId, {
+        intervalMs: 1000,
+        signal: pollAbortRef.current.signal,
+        onUpdate: setJobSnapshot,
+      });
+      const convId = job.result?.conversationId;
       if (convId) {
         navigate(`/c/${convId}`, {
           state: {
-            initialFragments: res.data.fragments,
+            initialFragments: job.result?.fragments,
             initialUserMsg: input,
           },
         });
       }
     } catch (err) {
+      if (err instanceof DOMException && err.name === 'AbortError') {
+        return;
+      }
       console.error(err);
+      setJobSnapshot(null);
     } finally {
       setLoading(false);
     }
@@ -142,6 +164,7 @@ const Home: React.FC = () => {
                 </div>
               </div>
             </div>
+            {loading && <ChatJobProgress job={jobSnapshot} />}
           </form>
 
           {/* Suggestion Buttons */}

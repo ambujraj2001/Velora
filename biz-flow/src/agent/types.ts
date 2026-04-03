@@ -12,12 +12,22 @@ export interface AgentPlan {
   steps: AgentStep[];
 }
 
+export type AgentProgressEvent =
+  | { kind: 'phase'; label: string }
+  | { kind: 'plan'; steps: Array<{ id: string; tool: string }> }
+  | { kind: 'step_start'; stepId: string; tool: string }
+  | { kind: 'step_done'; stepId: string; tool: string }
+  | { kind: 'step_error'; stepId: string; tool: string; message: string }
+  | { kind: 'replanning' };
+
 export interface AgentContext {
   traceId: string;
   requestId: string;
   logger: ContextLogger;
   userId?: string;
   userInput: string;
+  /** Optional: chat jobs, UI progress, etc. */
+  onProgress?: (event: AgentProgressEvent) => void;
   connectionSettings?: {
     type?: string;
     host?: string;

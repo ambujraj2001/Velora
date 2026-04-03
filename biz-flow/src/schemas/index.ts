@@ -17,6 +17,10 @@ export const emailReportSchema = z.object({
 
 export type EmailReportBody = z.infer<typeof emailReportSchema>;
 
+export const chatJobIdParamSchema = z.object({
+  jobId: z.string().uuid('Invalid job id'),
+});
+
 /** ── Connections (SQL) ────────────────────────────────────────────────── */
 
 export const addConnectionSchema = z.object({

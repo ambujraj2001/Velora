@@ -71,6 +71,7 @@ export async function runAgent(
   context.logger.info('agent_start', { userInput });
 
   try {
+    context.onProgress?.({ kind: 'phase', label: 'Planning next steps…' });
     let plan = await planner(userInput, context);
 
     const validationError = validateDependencyGraph(plan);
@@ -80,6 +81,11 @@ export async function runAgent(
       });
       plan = { steps: [{ id: 'step-1', tool: 'chat_response', input: {} }] };
     }
+
+    context.onProgress?.({
+      kind: 'plan',
+      steps: plan.steps.map((s) => ({ id: s.id, tool: s.tool })),
+    });
 
     const graph = buildGraph(plan, context);
 
@@ -112,6 +118,7 @@ export async function runAgent(
     if (sqlResult) {
       finalData = sqlResult.data.rows;
       try {
+        context.onProgress?.({ kind: 'phase', label: 'Summarizing results…' });
         const summaryMessages = dataSummaryPrompt({
           userInput,
           dataSampleJson: JSON.stringify(sqlResult.data.rows.slice(0, 3)),
