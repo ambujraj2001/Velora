@@ -1,6 +1,7 @@
 import crypto from 'crypto';
 import type { Request, Response } from 'express';
 import { v5 as uuidv5 } from 'uuid';
+import { sendError } from './response';
 
 export type SessionUser = {
   sub: string;
@@ -100,7 +101,7 @@ export const getSessionUser = (req: Request): SessionUser | null => {
 export const requireSessionUser = (req: Request, res: Response): SessionUser | null => {
   const user = getSessionUser(req);
   if (!user) {
-    res.status(401).json({ error: 'Unauthorized' });
+    sendError(res, 'UNAUTHORIZED', 'Unauthorized', 401);
     return null;
   }
   return user;

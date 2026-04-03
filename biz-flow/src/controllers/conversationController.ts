@@ -1,7 +1,9 @@
+import type { Request, Response } from 'express';
 import { supabase } from '../config/db';
 import { requireSessionUser } from '../utils/auth';
+import { sendSuccess, sendError } from '../utils/response';
 
-export const getConversations = async (req: any, res: any) => {
+export const getConversations = async (req: Request, res: Response): Promise<void> => {
   const { logger } = req.context;
   try {
     const user = requireSessionUser(req, res);
@@ -13,14 +15,15 @@ export const getConversations = async (req: any, res: any) => {
       .eq('user_id', user.userId)
       .order('created_at', { ascending: false });
     if (error) throw error;
-    res.json(data);
-  } catch (err: any) {
-    logger.error('conversations_list_error', { error: err.message });
-    res.status(500).json({ error: err.message });
+    sendSuccess(res, data);
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    logger.error('conversations_list_error', { error: msg });
+    sendError(res, 'INTERNAL_ERROR', msg);
   }
 };
 
-export const getMessages = async (req: any, res: any) => {
+export const getMessages = async (req: Request, res: Response): Promise<void> => {
   const { logger } = req.context;
   try {
     const user = requireSessionUser(req, res);
@@ -34,7 +37,8 @@ export const getMessages = async (req: any, res: any) => {
       .eq('user_id', user.userId)
       .single();
     if (!conversation) {
-      return res.status(404).json({ error: 'Conversation not found.' });
+      sendError(res, 'NOT_FOUND', 'Conversation not found.', 404);
+      return;
     }
 
     const { data, error } = await supabase
@@ -43,14 +47,15 @@ export const getMessages = async (req: any, res: any) => {
       .eq('conversation_id', conversationId)
       .order('created_at', { ascending: true });
     if (error) throw error;
-    res.json(data);
-  } catch (err: any) {
-    logger.error('messages_fetch_error', { error: err.message });
-    res.status(500).json({ error: err.message });
+    sendSuccess(res, data);
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    logger.error('messages_fetch_error', { error: msg });
+    sendError(res, 'INTERNAL_ERROR', msg);
   }
 };
 
-export const deleteConversation = async (req: any, res: any) => {
+export const deleteConversation = async (req: Request, res: Response): Promise<void> => {
   const { logger } = req.context;
   try {
     const user = requireSessionUser(req, res);
@@ -65,9 +70,10 @@ export const deleteConversation = async (req: any, res: any) => {
       .eq('id', conversationId)
       .eq('user_id', user.userId);
     if (error) throw error;
-    res.json({ success: true });
-  } catch (err: any) {
-    logger.error('conversation_delete_error', { error: err.message });
-    res.status(500).json({ error: err.message });
+    sendSuccess(res, { success: true });
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    logger.error('conversation_delete_error', { error: msg });
+    sendError(res, 'INTERNAL_ERROR', msg);
   }
 };

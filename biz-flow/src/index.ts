@@ -10,6 +10,7 @@ import authRoutes from './routes/auth';
 import settingsRoutes from './routes/settings';
 import queryRoutes from './routes/query';
 import { log } from './lib/logger';
+import { errorHandler } from './middleware/errorHandler';
 
 const app = express();
 const port = process.env.PORT || 3001;
@@ -37,6 +38,8 @@ app.use('/query', queryRoutes);
 app.get('/health', (_req, res) => {
   res.status(200).send('OK');
 });
+
+app.use(errorHandler);
 
 app.listen(port, () => {
   log('info', 'server_start', { port: Number(port) });

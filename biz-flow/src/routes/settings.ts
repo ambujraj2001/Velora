@@ -1,4 +1,6 @@
 import { Router } from 'express';
+import { validate } from '../middleware/validate';
+import { updateSettingsSchema, sendInvitesSchema } from '../schemas';
 import {
   getSettings,
   updateSettings,
@@ -9,8 +11,8 @@ import {
 const router = Router();
 
 router.get('/', getSettings);
-router.put('/', updateSettings);
+router.put('/', validate(updateSettingsSchema), updateSettings);
 router.get('/team', getTeam);
-router.post('/invite', sendInvites);
+router.post('/invite', validate(sendInvitesSchema), sendInvites);
 
 export default router;

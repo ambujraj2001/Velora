@@ -1,4 +1,6 @@
 import { Router } from 'express';
+import { validate } from '../middleware/validate';
+import { conversationIdParamSchema } from '../schemas';
 import {
   getConversations,
   getMessages,
@@ -8,7 +10,15 @@ import {
 const router = Router();
 
 router.get('/', getConversations);
-router.delete('/:conversationId', deleteConversation);
-router.get('/:conversationId/messages', getMessages);
+router.delete(
+  '/:conversationId',
+  validate(conversationIdParamSchema, 'params'),
+  deleteConversation,
+);
+router.get(
+  '/:conversationId/messages',
+  validate(conversationIdParamSchema, 'params'),
+  getMessages,
+);
 
 export default router;

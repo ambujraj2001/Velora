@@ -1,30 +1,28 @@
-import { Request, Response } from 'express';
+import type { Request, Response } from 'express';
 import { supabase } from '../config/db';
 import { requireSessionUser } from '../utils/auth';
+import { sendSuccess, sendError } from '../utils/response';
 import { askCsv } from '../services/csvQueryService';
+import type { CsvQueryBody } from '../schemas';
 
-/**
- * POST /api/query/csv
- *
- * Body: { "connection_id": "string", "query": "string" }
- *
- * Fetches connection details, validates type is 'csv', calls askCsv,
- * and returns generated SQL and resulting rows.
- */
-export const handleCsvQuery = async (req: Request, res: Response) => {
-  const { logger } = (req as any).context;
+function isCsvQueryFailed(err: unknown): err is { error: string; message: string; sql?: string } {
+  return (
+    typeof err === 'object' &&
+    err !== null &&
+    'error' in err &&
+    (err as { error: string }).error === 'CSV_QUERY_FAILED'
+  );
+}
+
+export const handleCsvQuery = async (req: Request, res: Response): Promise<void> => {
+  const { logger } = req.context;
 
   try {
     const user = requireSessionUser(req, res);
     if (!user) return;
 
-    const { connection_id, query } = req.body;
+    const { connection_id, query } = req.body as CsvQueryBody;
 
-    if (!connection_id || !query) {
-      return res.status(400).json({ error: 'connection_id and query are required' });
-    }
-
-    // 1. Fetch connection detail
     const { data: conn, error: connError } = await supabase
       .from('velora_connections')
       .select('*')
@@ -34,45 +32,51 @@ export const handleCsvQuery = async (req: Request, res: Response) => {
 
     if (connError || !conn) {
       logger.warn('csv_query_connection_not_found', { connection_id, userId: user.userId });
-      return res.status(404).json({ error: 'Connection not found or access denied.' });
+      sendError(res, 'NOT_FOUND', 'Connection not found or access denied.', 404);
+      return;
     }
 
-    // 2. Validate type is 'csv'
     if (conn.type !== 'csv') {
       logger.warn('csv_query_not_a_csv_connection', { connection_id, type: conn.type });
-      return res.status(400).json({ error: 'Only CSV connections can be queried via this endpoint.' });
+      sendError(
+        res,
+        'BAD_REQUEST',
+        'Only CSV connections can be queried via this endpoint.',
+        400,
+      );
+      return;
     }
 
-    // 3. Prepare query context
     const csvContext = {
-      query: query,
+      query,
       file_url: conn.file_url,
       schema_json: conn.schema_json,
-      description: conn.description || ''
+      description: conn.description || '',
     };
 
     logger.info('csv_query_start', { connection_id, query });
 
-    // 4. Call askCsv (SQL Generation + Execution)
     const result = await askCsv(csvContext, logger);
 
     logger.info('csv_query_complete', { rowCount: result.rows.length });
 
-    return res.status(200).json(result);
-
-  } catch (err: any) {
+    sendSuccess(res, result);
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
     logger.error('csv_query_controller_error', {
-      error: err.message,
-      stack: err.stack,
+      error: message,
+      stack: err instanceof Error ? err.stack : undefined,
     });
 
-    if (err.error === 'CSV_QUERY_FAILED') {
-      return res.status(500).json(err);
+    if (isCsvQueryFailed(err)) {
+      sendError(res, err.error, err.message, 500, err.sql !== undefined ? { sql: err.sql } : undefined);
+      return;
     }
 
-    return res.status(500).json({
-      error: 'CSV_QUERY_FAILED',
-      message: err.message || 'An unexpected error occurred during CSV query execution.'
-    });
+    sendError(
+      res,
+      'CSV_QUERY_FAILED',
+      message || 'An unexpected error occurred during CSV query execution.',
+    );
   }
 };

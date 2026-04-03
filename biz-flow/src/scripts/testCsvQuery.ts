@@ -8,7 +8,8 @@
  * No data is written to disk or Supabase.
  */
 
-import { validateCsvInput, inferCsvSchema, sampleCsvRows } from '../services/csvService';
+import { addCsvConnectionSchema } from '../schemas';
+import { inferCsvSchema, sampleCsvRows } from '../services/csvService';
 
 async function main() {
   const file_url = process.argv[2];
@@ -18,10 +19,13 @@ async function main() {
     process.exit(1);
   }
 
-  // Reuse the same validation as the API
-  const err = validateCsvInput('test', file_url, 'test');
-  if (err) {
-    console.error(`Validation failed: ${err}`);
+  const parsed = addCsvConnectionSchema.safeParse({
+    name: 'test',
+    file_url,
+    description: 'test',
+  });
+  if (!parsed.success) {
+    console.error('Validation failed:', parsed.error.flatten().fieldErrors);
     process.exit(1);
   }
 

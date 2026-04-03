@@ -1,7 +1,10 @@
+import type { Request, Response } from 'express';
 import { supabase } from '../config/db';
 import { requireSessionUser } from '../utils/auth';
+import { sendSuccess, sendError } from '../utils/response';
+import type { UpdateSettingsBody, SendInvitesBody } from '../schemas';
 
-export const getSettings = async (req: any, res: any) => {
+export const getSettings = async (req: Request, res: Response): Promise<void> => {
   const { logger } = req.context;
   try {
     const user = requireSessionUser(req, res);
@@ -13,20 +16,21 @@ export const getSettings = async (req: any, res: any) => {
       .eq('user_id', user.userId)
       .single();
 
-    res.json(data || { query_run_mode: 'ask_every_time' });
-  } catch (err: any) {
-    logger.error('settings_fetch_error', { error: err.message });
-    res.status(500).json({ error: err.message });
+    sendSuccess(res, data || { query_run_mode: 'ask_every_time' });
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    logger.error('settings_fetch_error', { error: msg });
+    sendError(res, 'INTERNAL_ERROR', msg);
   }
 };
 
-export const updateSettings = async (req: any, res: any) => {
+export const updateSettings = async (req: Request, res: Response): Promise<void> => {
   const { logger } = req.context;
   try {
     const user = requireSessionUser(req, res);
     if (!user) return;
 
-    const { query_run_mode } = req.body;
+    const { query_run_mode } = req.body as UpdateSettingsBody;
 
     const { data, error } = await supabase
       .from('velora_settings')
@@ -38,14 +42,15 @@ export const updateSettings = async (req: any, res: any) => {
       .single();
 
     if (error) throw error;
-    res.json(data);
-  } catch (err: any) {
-    logger.error('settings_update_error', { error: err.message });
-    res.status(500).json({ error: err.message });
+    sendSuccess(res, data);
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    logger.error('settings_update_error', { error: msg });
+    sendError(res, 'INTERNAL_ERROR', msg);
   }
 };
 
-export const getTeam = async (req: any, res: any) => {
+export const getTeam = async (req: Request, res: Response): Promise<void> => {
   const { logger } = req.context;
   try {
     const user = requireSessionUser(req, res);
@@ -63,7 +68,7 @@ export const getTeam = async (req: any, res: any) => {
       .eq('invited_by', user.userId)
       .order('created_at', { ascending: false });
 
-    const members = [];
+    const members: Array<Record<string, unknown>> = [];
     if (me) {
       members.push({ ...me, role: 'Owner', status: 'Active' });
     }
@@ -81,41 +86,37 @@ export const getTeam = async (req: any, res: any) => {
       }
     }
 
-    res.json(members);
-  } catch (err: any) {
-    logger.error('team_fetch_error', { error: err.message });
-    res.status(500).json({ error: err.message });
+    sendSuccess(res, members);
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    logger.error('team_fetch_error', { error: msg });
+    sendError(res, 'INTERNAL_ERROR', msg);
   }
 };
 
-export const sendInvites = async (req: any, res: any) => {
+export const sendInvites = async (req: Request, res: Response): Promise<void> => {
   const { logger } = req.context;
   try {
     const user = requireSessionUser(req, res);
     if (!user) return;
 
-    const { emails } = req.body;
-    if (!emails || !Array.isArray(emails) || emails.length === 0) {
-      return res.status(400).json({ error: 'Provide an array of emails.' });
-    }
+    const { emails } = req.body as SendInvitesBody;
 
     logger.info('invites_sending', { count: emails.length });
 
-    const rows = emails.map((email: string) => ({
+    const rows = emails.map((email) => ({
       invited_by: user.userId,
       email: email.trim().toLowerCase(),
       status: 'pending',
     }));
 
-    const { data, error } = await supabase
-      .from('velora_team_invites')
-      .insert(rows)
-      .select();
+    const { data, error } = await supabase.from('velora_team_invites').insert(rows).select();
 
     if (error) throw error;
-    res.json(data);
-  } catch (err: any) {
-    logger.error('invites_send_error', { error: err.message });
-    res.status(500).json({ error: err.message });
+    sendSuccess(res, data);
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    logger.error('invites_send_error', { error: msg });
+    sendError(res, 'INTERNAL_ERROR', msg);
   }
 };

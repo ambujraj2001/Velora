@@ -20,30 +20,6 @@ export interface CreateCsvConnectionInput {
   user_id: string;
 }
 
-// ─── Validation ───────────────────────────────────────────────────────────────
-
-const BLOCKED_PATTERNS = ['localhost', '127.0.0.1', 'file://'];
-
-export function validateCsvInput(
-  name: string,
-  file_url: string,
-  description: string,
-): string | null {
-  if (!name || !name.trim()) return 'name is required';
-  if (!file_url || !file_url.trim()) return 'file_url is required';
-  if (!description || !description.trim()) return 'description is required';
-
-  if (!file_url.startsWith('https://'))
-    return 'file_url must start with https://';
-
-  for (const pattern of BLOCKED_PATTERNS) {
-    if (file_url.includes(pattern))
-      return `file_url must not contain "${pattern}"`;
-  }
-
-  return null; // valid
-}
-
 // ─── Schema Inference ─────────────────────────────────────────────────────────
 
 /**

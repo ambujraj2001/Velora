@@ -1,26 +1,27 @@
+import type { Request, Response } from 'express';
+import { v4 as uuidv4 } from 'uuid';
 import { supabase } from '../config/db';
+import { mistral } from '../config/llm';
 import { requireSessionUser } from '../utils/auth';
+import { decrypt } from '../utils/crypto';
+import { sendSuccess, sendError } from '../utils/response';
+import { getClickhouseClient } from '../lib/clickhouse';
 import { highchartsConfigPrompt } from '../prompts';
+import type { SaveDashboardBody } from '../schemas';
 
-const getUserOrReturn = (req: any, res: any) => {
+const getUserOrReturn = (req: Request, res: Response) => {
   const user = requireSessionUser(req, res);
   if (!user) return null;
   return user;
 };
 
-export const saveDashboard = async (req: any, res: any) => {
+export const saveDashboard = async (req: Request, res: Response): Promise<void> => {
   const { logger } = req.context;
   try {
     const user = getUserOrReturn(req, res);
     if (!user) return;
 
-    const {
-      connectionId,
-      name,
-      description,
-      fragments,
-      queries,
-    } = req.body;
+    const { connectionId, name, description, fragments, queries } = req.body as SaveDashboardBody;
 
     logger.info('dashboard_saving', { name });
 
@@ -39,14 +40,15 @@ export const saveDashboard = async (req: any, res: any) => {
 
     if (error) throw error;
 
-    res.json(data);
-  } catch (err: any) {
-    logger.error('dashboard_save_error', { error: err.message });
-    res.status(500).json({ error: err.message });
+    sendSuccess(res, data);
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    logger.error('dashboard_save_error', { error: msg });
+    sendError(res, 'INTERNAL_ERROR', msg);
   }
 };
 
-export const getDashboards = async (req: any, res: any) => {
+export const getDashboards = async (req: Request, res: Response): Promise<void> => {
   const { logger } = req.context;
   try {
     const user = getUserOrReturn(req, res);
@@ -60,14 +62,15 @@ export const getDashboards = async (req: any, res: any) => {
 
     if (error) throw error;
 
-    res.json(data);
-  } catch (err: any) {
-    logger.error('dashboards_list_error', { error: err.message });
-    res.status(500).json({ error: err.message });
+    sendSuccess(res, data);
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    logger.error('dashboards_list_error', { error: msg });
+    sendError(res, 'INTERNAL_ERROR', msg);
   }
 };
 
-export const getDashboardById = async (req: any, res: any) => {
+export const getDashboardById = async (req: Request, res: Response): Promise<void> => {
   const { logger } = req.context;
   try {
     const user = getUserOrReturn(req, res);
@@ -84,14 +87,15 @@ export const getDashboardById = async (req: any, res: any) => {
 
     if (error) throw error;
 
-    res.json(data);
-  } catch (err: any) {
-    logger.error('dashboard_fetch_error', { error: err.message });
-    res.status(500).json({ error: err.message });
+    sendSuccess(res, data);
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    logger.error('dashboard_fetch_error', { error: msg });
+    sendError(res, 'INTERNAL_ERROR', msg);
   }
 };
 
-export const refreshDashboard = async (req: any, res: any) => {
+export const refreshDashboard = async (req: Request, res: Response): Promise<void> => {
   const { logger } = req.context;
   try {
     const user = getUserOrReturn(req, res);
@@ -100,31 +104,38 @@ export const refreshDashboard = async (req: any, res: any) => {
     const { id } = req.params;
     logger.info('dashboard_refreshing', { dashboardId: id });
 
-    const { data: dashboard } = await supabase
+    const { data: dashboard, error: dashErr } = await supabase
       .from('velora_dashboards')
       .select('*')
       .eq('id', id)
       .eq('user_id', user.userId)
       .single();
 
-    if (!dashboard) throw new Error('Dashboard not found');
-
-    if (!dashboard.queries || dashboard.queries.length === 0) {
-      return res.json(dashboard);
+    if (dashErr || !dashboard) {
+      sendError(res, 'NOT_FOUND', 'Dashboard not found', 404);
+      return;
     }
 
-    const { data: connection } = await supabase
+    const queries = dashboard.queries as Array<{
+      name?: string;
+      sql: string;
+      type?: string;
+    }> | null;
+    if (!queries || queries.length === 0) {
+      sendSuccess(res, dashboard);
+      return;
+    }
+
+    const { data: connection, error: connErr } = await supabase
       .from('velora_connections')
       .select('*')
       .eq('id', dashboard.connection_id)
       .single();
 
-    if (!connection) throw new Error('Connection not found');
-
-    const { decrypt } = require('../utils/crypto');
-    const { getClickhouseClient } = require('../lib/clickhouse');
-    const { mistral } = require('../config/llm');
-    const { v4: uuidv4 } = require('uuid');
+    if (connErr || !connection) {
+      sendError(res, 'NOT_FOUND', 'Connection not found', 404);
+      return;
+    }
 
     const client = getClickhouseClient({
       host: connection.host,
@@ -134,10 +145,10 @@ export const refreshDashboard = async (req: any, res: any) => {
       password: decrypt(connection.password),
     });
 
-    const newFragments: any[] = [];
+    const newFragments: Array<Record<string, unknown>> = [];
 
     try {
-      for (const query of dashboard.queries) {
+      for (const query of queries) {
         logger.info('db_query', { tool: 'clickhouse', dashboardId: id, queryName: query.name });
 
         const resultSet = await client.query({
@@ -145,15 +156,14 @@ export const refreshDashboard = async (req: any, res: any) => {
           format: 'JSONEachRow',
         });
 
-        const rows = (await resultSet.json()) as any[];
+        const rows = (await resultSet.json()) as Record<string, unknown>[];
 
         logger.info('db_query_result', { queryName: query.name, rowCount: rows.length });
 
         if (rows.length === 0) continue;
 
         const isChart =
-          query.type === 'chart' ||
-          (rows.length > 0 && rows.length <= 30);
+          query.type === 'chart' || (rows.length > 0 && rows.length <= 30);
 
         if (isChart) {
           const contextPrompt = dashboard.description
@@ -190,7 +200,7 @@ export const refreshDashboard = async (req: any, res: any) => {
             name: query.name,
             sql: query.sql,
             data: {
-              columns: Object.keys(rows[0]),
+              columns: Object.keys(rows[0] as object),
               rows,
             },
           });
@@ -201,7 +211,8 @@ export const refreshDashboard = async (req: any, res: any) => {
     }
 
     if (newFragments.length === 0) {
-      return res.json(dashboard);
+      sendSuccess(res, dashboard);
+      return;
     }
 
     const { data, error } = await supabase
@@ -217,14 +228,15 @@ export const refreshDashboard = async (req: any, res: any) => {
     if (error) throw error;
 
     logger.info('dashboard_refreshed', { dashboardId: id, fragmentCount: newFragments.length });
-    res.json(data);
-  } catch (err: any) {
-    logger.error('dashboard_refresh_error', { error: err.message });
-    res.status(500).json({ error: err.message });
+    sendSuccess(res, data);
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    logger.error('dashboard_refresh_error', { error: msg });
+    sendError(res, 'INTERNAL_ERROR', msg);
   }
 };
 
-export const deleteDashboard = async (req: any, res: any) => {
+export const deleteDashboard = async (req: Request, res: Response): Promise<void> => {
   const { logger } = req.context;
   try {
     const user = getUserOrReturn(req, res);
@@ -241,9 +253,10 @@ export const deleteDashboard = async (req: any, res: any) => {
 
     if (error) throw error;
 
-    res.json({ success: true });
-  } catch (err: any) {
-    logger.error('dashboard_delete_error', { error: err.message });
-    res.status(500).json({ error: err.message });
+    sendSuccess(res, { success: true });
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    logger.error('dashboard_delete_error', { error: msg });
+    sendError(res, 'INTERNAL_ERROR', msg);
   }
 };

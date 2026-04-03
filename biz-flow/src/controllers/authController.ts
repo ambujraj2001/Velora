@@ -6,6 +6,7 @@ import {
   getSessionUser,
   setSessionCookie,
 } from '../utils/auth';
+import { sendSuccess, sendError } from '../utils/response';
 import { supabase } from '../config/db';
 import { v5 as uuidv5 } from 'uuid';
 
@@ -20,7 +21,8 @@ export const handleGoogleCallback = async (req: Request, res: Response) => {
   try {
     const code = typeof req.query.code === 'string' ? req.query.code : '';
     if (!code) {
-      return res.status(400).send('Missing Google authorization code.');
+      sendError(res, 'AUTH_ERROR', 'Missing Google authorization code.', 400);
+      return;
     }
 
     const { profile, sessionToken } = await exchangeGoogleCode(code);
@@ -40,15 +42,16 @@ export const handleGoogleCallback = async (req: Request, res: Response) => {
 
     setSessionCookie(res, sessionToken);
     res.redirect(process.env.APP_URL || 'http://localhost:5173');
-  } catch (err: any) {
-    logger.error('auth_google_callback_error', { error: err.message });
-    res.status(500).send(err?.message || 'Google login failed.');
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    logger.error('auth_google_callback_error', { error: msg });
+    sendError(res, 'AUTH_ERROR', msg || 'Google login failed.');
   }
 };
 
 export const getMe = (req: Request, res: Response) => {
   const user = getSessionUser(req);
-  res.json({ user });
+  sendSuccess(res, { user });
 };
 
 export const logout = (_req: Request, res: Response) => {

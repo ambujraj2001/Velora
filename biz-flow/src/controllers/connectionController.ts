@@ -1,52 +1,38 @@
+import type { Request, Response } from 'express';
 import { supabase } from '../config/db';
-import crypto from 'crypto';
 import dotenv from 'dotenv';
-import type { ConnectionType } from '../types';
 import { requireSessionUser } from '../utils/auth';
+import { encrypt, decrypt } from '../utils/crypto';
+import { sendSuccess, sendError } from '../utils/response';
 import { getClickhouseClient } from '../lib/clickhouse';
 import { indexConnection } from '../services/connectionEmbeddingService';
+import { fetchSchema } from '../services/schemaService';
+import type { AddConnectionBody } from '../schemas';
+
 dotenv.config();
 
-const ENCRYPTION_KEY = process.env.ENCRYPTION_KEY || '12345678123456781234567812345678'; // 32 bytes
-const IV_LENGTH = 16;
-const CONNECTION_TYPES: ConnectionType[] = ['postgres', 'clickhouse'];
-
-function encrypt(text: string) {
-  let iv = crypto.randomBytes(IV_LENGTH);
-  let cipher = crypto.createCipheriv('aes-256-cbc', Buffer.from(ENCRYPTION_KEY), iv);
-  let encrypted = cipher.update(text);
-  encrypted = Buffer.concat([encrypted, cipher.final()]);
-  return iv.toString('hex') + ':' + encrypted.toString('hex');
-}
-
-export const addConnection = async (req: any, res: any) => {
+export const addConnection = async (req: Request, res: Response): Promise<void> => {
   const { logger } = req.context;
   try {
     const user = requireSessionUser(req, res);
     if (!user) return;
 
-    const { name, type, host, port, database, username, password, description } = req.body;
-    const normalizedType = String(type || '').toLowerCase() as ConnectionType;
-    if (!CONNECTION_TYPES.includes(normalizedType)) {
-      return res.status(400).json({
-        error: `Unsupported connection type. Use one of: ${CONNECTION_TYPES.join(', ')}`,
-      });
-    }
+    const { name, type, host, port, database, username, password, description } =
+      req.body as AddConnectionBody;
     const encPassword = encrypt(password);
 
-    logger.info('connection_creating', { name, type: normalizedType });
+    logger.info('connection_creating', { name, type });
 
-    // --- Proactive Connectivity Check (Phase 1) ---
-    if (normalizedType !== 'csv') {
-      try {
-        const client = getClickhouseClient({ host, port, database, username, password });
-        const pinged = await client.ping();
-        if (!pinged.success) throw new Error('Could not ping database.');
-        await client.close();
-      } catch (err: any) {
-        logger.error('connection_validation_failed', { error: err.message });
-        return res.status(400).json({ error: `Connection failed: ${err.message}` });
-      }
+    try {
+      const client = getClickhouseClient({ host, port, database, username, password });
+      const pinged = await client.ping();
+      if (!pinged.success) throw new Error('Could not ping database.');
+      await client.close();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      logger.error('connection_validation_failed', { error: msg });
+      sendError(res, 'CONNECTION_FAILED', `Connection failed: ${msg}`, 400);
+      return;
     }
 
     const { data, error } = await supabase
@@ -54,50 +40,46 @@ export const addConnection = async (req: any, res: any) => {
       .insert({
         user_id: user.userId,
         name,
-        type: normalizedType,
+        type,
         host,
         port,
         database,
         username,
         password: encPassword,
-        description: (description || '').trim(),
+        description: (description ?? '').trim(),
       })
       .select()
       .single();
 
     if (error) throw error;
 
-    // Trigger indexing (async with schema fetch for SQL)
     (async () => {
       try {
-        let schemaContext = '';
-        if (normalizedType !== 'csv') {
-          const { decrypt } = require('../utils/crypto');
-          const settings = {
-            host,
-            port,
-            database,
-            username,
-            password: decrypt(encPassword),
-          };
-          const { fetchSchema } = require('../services/schemaService');
-          schemaContext = await fetchSchema(settings);
-        }
+        const settings = {
+          host,
+          port,
+          database,
+          username,
+          password: decrypt(encPassword),
+        };
+        const schemaContext = await fetchSchema(settings);
         await indexConnection(data, logger, [], schemaContext);
-      } catch (e: any) {
-        logger.error('async_sql_indexing_failed', { error: e.message, connectionId: data.id });
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : String(e);
+        logger.error('async_sql_indexing_failed', { error: msg, connectionId: data.id });
       }
     })();
 
     const { password: _, ...rest } = data;
-    res.json(rest);
-  } catch (err: any) {
-    logger.error('connection_create_error', { error: err.message });
-    res.status(500).json({ error: err.message });
+    sendSuccess(res, rest);
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    logger.error('connection_create_error', { error: msg });
+    sendError(res, 'INTERNAL_ERROR', msg);
   }
 };
 
-export const getConnections = async (req: any, res: any) => {
+export const getConnections = async (req: Request, res: Response): Promise<void> => {
   const { logger } = req.context;
   try {
     const user = requireSessionUser(req, res);
@@ -110,20 +92,21 @@ export const getConnections = async (req: any, res: any) => {
       .order('created_at', { ascending: false });
 
     if (error) throw error;
-    res.json(data);
-  } catch (err: any) {
-    logger.error('connections_list_error', { error: err.message });
-    res.status(500).json({ error: err.message });
+    sendSuccess(res, data);
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    logger.error('connections_list_error', { error: msg });
+    sendError(res, 'INTERNAL_ERROR', msg);
   }
 };
 
-export const deleteConnection = async (req: any, res: any) => {
+export const deleteConnection = async (req: Request, res: Response): Promise<void> => {
   const { logger } = req.context;
   try {
     const user = requireSessionUser(req, res);
     if (!user) return;
 
-    const { id } = req.params;
+    const id = String(req.params.id);
     logger.info('connection_deleting', { connectionId: id });
 
     const { error } = await supabase
@@ -133,14 +116,14 @@ export const deleteConnection = async (req: any, res: any) => {
       .eq('id', id);
 
     if (error) throw error;
-    res.json({ success: true });
-  } catch (err: any) {
-    logger.error('connection_delete_error', { error: err.message });
-    res.status(500).json({ error: err.message });
+    sendSuccess(res, { success: true });
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    logger.error('connection_delete_error', { error: msg });
+    sendError(res, 'INTERNAL_ERROR', msg);
   }
 };
 
-// Helper: load and decrypt a connection by ID for the authed user
 async function loadConnection(userId: string, connId: string) {
   const { data: conn } = await supabase
     .from('velora_connections')
@@ -151,24 +134,29 @@ async function loadConnection(userId: string, connId: string) {
   return conn;
 }
 
-export const getConnectionTables = async (req: any, res: any) => {
+export const getConnectionTables = async (req: Request, res: Response): Promise<void> => {
   const { logger } = req.context;
   try {
     const user = requireSessionUser(req, res);
     if (!user) return;
 
-    const { id } = req.params;
+    const id = String(req.params.id);
     const conn = await loadConnection(user.userId, id);
-    if (!conn) return res.status(404).json({ error: 'Connection not found.' });
-
-    if (conn.type === 'csv') {
-      return res.json([{
-        name: 'data',
-        database: 'duckdb'
-      }]);
+    if (!conn) {
+      sendError(res, 'NOT_FOUND', 'Connection not found.', 404);
+      return;
     }
 
-    const { decrypt } = require('../utils/crypto');
+    if (conn.type === 'csv') {
+      sendSuccess(res, [
+        {
+          name: 'data',
+          database: 'duckdb',
+        },
+      ]);
+      return;
+    }
+
     const settings = {
       host: conn.host,
       port: conn.port,
@@ -187,40 +175,48 @@ export const getConnectionTables = async (req: any, res: any) => {
         name: r.name,
         database: conn.database || 'default',
       }));
-      res.json(tables);
+      sendSuccess(res, tables);
     } finally {
       await client.close();
     }
-  } catch (err: any) {
-    logger.error('connection_tables_error', { error: err.message });
-    res.status(500).json({ error: err.message });
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    logger.error('connection_tables_error', { error: msg });
+    sendError(res, 'INTERNAL_ERROR', msg);
   }
 };
 
-export const getConnectionTableColumns = async (req: any, res: any) => {
+export const getConnectionTableColumns = async (req: Request, res: Response): Promise<void> => {
   const { logger } = req.context;
   try {
     const user = requireSessionUser(req, res);
     if (!user) return;
 
-    const { id, table } = req.params;
+    const id = String(req.params.id);
+    const table = String(req.params.table);
     const conn = await loadConnection(user.userId, id);
-    if (!conn) return res.status(404).json({ error: 'Connection not found.' });
+    if (!conn) {
+      sendError(res, 'NOT_FOUND', 'Connection not found.', 404);
+      return;
+    }
 
     if (conn.type === 'csv') {
-      if (table !== 'data') return res.status(404).json({ error: 'Table not found for CSV.' });
-      
-      const schema = (conn.schema_json as any);
-      const columns = (schema?.columns || []).map((c: any) => ({
+      if (table !== 'data') {
+        sendError(res, 'NOT_FOUND', 'Table not found for CSV.', 404);
+        return;
+      }
+
+      const schema = conn.schema_json as { columns?: Array<{ name: string; type: string }> };
+      const columns = (schema?.columns || []).map((c) => ({
         name: c.name,
         type: c.type,
         default_type: '',
-        comment: ''
+        comment: '',
       }));
-      return res.json(columns);
+      sendSuccess(res, columns);
+      return;
     }
 
-    const { decrypt } = require('../utils/crypto');
     const settings = {
       host: conn.host,
       port: conn.port,
@@ -229,7 +225,12 @@ export const getConnectionTableColumns = async (req: any, res: any) => {
       password: decrypt(conn.password),
     };
 
-    logger.info('db_query', { tool: 'clickhouse', query: 'DESCRIBE TABLE', table, connectionId: id });
+    logger.info('db_query', {
+      tool: 'clickhouse',
+      query: 'DESCRIBE TABLE',
+      table,
+      connectionId: id,
+    });
 
     const client = getClickhouseClient(settings);
     try {
@@ -243,12 +244,13 @@ export const getConnectionTableColumns = async (req: any, res: any) => {
         default_type: string;
         comment: string;
       }>;
-      res.json(columns);
+      sendSuccess(res, columns);
     } finally {
       await client.close();
     }
-  } catch (err: any) {
-    logger.error('connection_columns_error', { error: err.message, table: req.params.table });
-    res.status(500).json({ error: err.message });
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    logger.error('connection_columns_error', { error: msg, table: req.params.table });
+    sendError(res, 'INTERNAL_ERROR', msg);
   }
 };

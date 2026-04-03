@@ -1,5 +1,6 @@
 import { GraphState, AnyFragment } from '../../types';
 import { v4 as uuidv4 } from 'uuid';
+import { mistral } from '../../config/llm';
 import { createLogger } from '../../lib/logger';
 import { dataSummaryPrompt } from '../../prompts';
 
@@ -19,7 +20,6 @@ export async function fragmentBuilderNode(state: GraphState): Promise<Partial<Gr
     if (state.intent === 'DATA_QUERY') {
       logger.info('tool_call', { tool: 'fragment_builder', intent: 'DATA_QUERY' });
 
-      const { mistral } = require('../../config/llm');
       const summaryMessages = dataSummaryPrompt({
         userInput: state.userInput,
         dataSampleJson: JSON.stringify(state.rows.slice(0, 3)),

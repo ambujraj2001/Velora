@@ -1,6 +1,7 @@
 import { v4 as uuidv4 } from 'uuid';
 import { askCsv } from './csvQueryService';
 import { AnyFragment } from '../types';
+import { invokeWithLogging } from '../lib/llmLogger';
 
 export interface CsvChatRequest {
   query: string;
@@ -21,7 +22,7 @@ async function summarizeCsvResult(params: {
   rows: any[];
   logger: any;
 }): Promise<string> {
-  if (params.rows.length === 0) return "_No data was found for this query._";
+  if (params.rows.length === 0) return '_No data was found for this query._';
 
   const systemPrompt = `You are a helpful data analyst. 
   
@@ -41,11 +42,10 @@ Rules:
 * Do NOT mention internal SQL or database details.
 * Keep it under 3 sentences.`;
 
-  const { invokeWithLogging } = require('../lib/llmLogger');
-  const response = await invokeWithLogging(
-    [['system', systemPrompt]],
-    { logger: params.logger, tool: 'csv_result_summarizer' }
-  );
+  const response = await invokeWithLogging([['system', systemPrompt]], {
+    logger: params.logger,
+    tool: 'csv_result_summarizer',
+  });
 
   return response.content.toString().trim();
 }
@@ -59,18 +59,21 @@ export async function handleCsvChatAction(params: CsvChatRequest): Promise<CsvCh
 
   try {
     // 1. Reuse existing CSV query service (Infers schema + generates SQL + executes)
-    const result = await askCsv({
-      query,
-      file_url: connection.file_url,
-      schema_json: connection.schema_json,
-      description: connection.description || ''
-    }, logger);
+    const result = await askCsv(
+      {
+        query,
+        file_url: connection.file_url,
+        schema_json: connection.schema_json,
+        description: connection.description || '',
+      },
+      logger,
+    );
 
     // 2. Generate insightful summary
     const summary = await summarizeCsvResult({
       query,
       rows: result.rows,
-      logger
+      logger,
     });
 
     // 3. Build fragments in the standard format
@@ -80,9 +83,9 @@ export async function handleCsvChatAction(params: CsvChatRequest): Promise<CsvCh
     fragments.push({
       id: uuidv4(),
       type: 'md',
-      data: { 
-        content: `### Query Results\n${summary}`
-      }
+      data: {
+        content: `### Query Results\n${summary}`,
+      },
     });
 
     // Table view
@@ -92,17 +95,16 @@ export async function handleCsvChatAction(params: CsvChatRequest): Promise<CsvCh
         type: 'table',
         data: {
           columns: Object.keys(result.rows[0]),
-          rows: result.rows
+          rows: result.rows,
         },
-        sql: result.sql
+        sql: result.sql,
       });
     }
 
     return {
       fragments,
-      sql: result.sql
+      sql: result.sql,
     };
-
   } catch (err: any) {
     logger.error('csv_chat_service_error', { error: err.message, query });
 
@@ -112,12 +114,12 @@ export async function handleCsvChatAction(params: CsvChatRequest): Promise<CsvCh
         {
           id: uuidv4(),
           type: 'error',
-          data: { 
-            message: `CSV Query Failed: ${err.message || 'Unknown error occurred while processing the CSV.'}` 
-          }
-        }
+          data: {
+            message: `CSV Query Failed: ${err.message || 'Unknown error occurred while processing the CSV.'}`,
+          },
+        },
       ],
-      sql: err.sql || ''
+      sql: err.sql || '',
     };
   }
 }

@@ -1,14 +1,17 @@
+import type { Request, Response } from 'express';
 import { runAgent } from '../agent';
 import { supabase } from '../config/db';
+import { mistral } from '../config/llm';
 import { requireSessionUser } from '../utils/auth';
+import { decrypt } from '../utils/crypto';
+import { sendSuccess, sendError } from '../utils/response';
 import { conversationTitlePrompt } from '../prompts';
 import { selectBestConnection } from '../services/connectionEmbeddingService';
+import { runReportFlow, sendReportEmail } from '../services/reportService';
+import type { AgentContext } from '../agent/types';
+import type { ChatRequestBody, EmailReportBody } from '../schemas';
 
-/**
- * Helper to process queries within the chat flow.
- * Phase 6: Automatic connection selection if not provided.
- */
-export const handleChat = async (req: any, res: any) => {
+export const handleChat = async (req: Request, res: Response): Promise<void> => {
   const { logger, traceId, requestId } = req.context;
 
   try {
@@ -17,9 +20,8 @@ export const handleChat = async (req: any, res: any) => {
     const user = requireSessionUser(req, res);
     if (!user) return;
 
-    const { userInput, conversationId, connectionId, mode = 'chat' } = req.body;
+    const { userInput, conversationId, connectionId, mode = 'chat' } = req.body as ChatRequestBody;
 
-    // ... (unchanged connection selecting logic) ...
     let finalConnId = connectionId;
 
     if (!finalConnId) {
@@ -34,16 +36,12 @@ export const handleChat = async (req: any, res: any) => {
       }
     }
 
-    let connSettings: any = undefined;
+    let connSettings: AgentContext['connectionSettings'] = undefined;
     const connQuery = supabase.from('velora_connections').select('*');
     if (finalConnId) {
       connQuery.eq('id', finalConnId);
     } else {
-      // Existing fallback: latest connection
-      connQuery
-        .eq('user_id', user.userId)
-        .order('created_at', { ascending: false })
-        .limit(1);
+      connQuery.eq('user_id', user.userId).order('created_at', { ascending: false }).limit(1);
     }
 
     const { data: conn } = await connQuery.maybeSingle();
@@ -59,7 +57,6 @@ export const handleChat = async (req: any, res: any) => {
           description: conn.description,
         };
       } else {
-        const { decrypt } = require('../utils/crypto');
         try {
           connSettings = {
             type: conn.type,
@@ -69,8 +66,9 @@ export const handleChat = async (req: any, res: any) => {
             username: conn.username,
             password: decrypt(conn.password),
           };
-        } catch (decErr: any) {
-          logger.error('connection_decrypt_failed', { error: decErr.message });
+        } catch (decErr: unknown) {
+          const msg = decErr instanceof Error ? decErr.message : String(decErr);
+          logger.error('connection_decrypt_failed', { error: msg });
         }
       }
 
@@ -82,8 +80,7 @@ export const handleChat = async (req: any, res: any) => {
       logger.warn('connection_not_found', { userId: user.userId });
     }
 
-    // --- History fetching (unchanged) ---
-    let history: any[] = [];
+    let history: AgentContext['history'] = [];
     if (conversationId) {
       const { data: msgs } = await supabase
         .from('velora_messages')
@@ -91,10 +88,11 @@ export const handleChat = async (req: any, res: any) => {
         .eq('conversation_id', conversationId)
         .order('created_at', { ascending: true })
         .limit(10);
-      if (msgs) history = msgs;
+      if (msgs) {
+        history = msgs as Array<{ role: 'user' | 'assistant'; content: string }>;
+      }
     }
 
-    // --- Step 1 - Existing execution (replaces graph) ---
     const agentResult = await runAgent(userInput, {
       traceId,
       requestId,
@@ -111,9 +109,7 @@ export const handleChat = async (req: any, res: any) => {
       fragmentCount: agentResult.fragments.length,
     });
 
-    // --- Step 2 - Report mode branch ---
     if (mode === 'report') {
-      const { runReportFlow } = require('../services/reportService');
       const reportResult = await runReportFlow({
         query: userInput,
         userId: user.userId,
@@ -121,10 +117,9 @@ export const handleChat = async (req: any, res: any) => {
         agentResult,
       });
 
-      // ONLY include the report fragment in report mode for a clean business experience
       const reportFragment = {
         id: `report-${Date.now()}`,
-        type: 'report',
+        type: 'report' as const,
         data: {
           markdown: reportResult.reportMarkdown,
           pdfBase64: reportResult.pdfBase64,
@@ -132,18 +127,14 @@ export const handleChat = async (req: any, res: any) => {
         },
       };
 
-      // Persist ONLY the report fragment for this message
-      agentResult.fragments = [reportFragment as any];
+      agentResult.fragments = [reportFragment as (typeof agentResult.fragments)[number]];
     }
 
-    // Extract SQL from step results for persistence
     const sqlStep = agentResult.stepResults.find(
       (r) => (r.tool === 'sql_query' || r.tool === 'csv_query') && !r.error,
     );
 
-    // --- Supabase persistence (unchanged) ---
     let convId = conversationId;
-    // ... insert conversation and messages if chat mode ...
     if (!convId) {
       logger.info('conversation_creating', { userId: user.userId });
       const { data: conv, error: convError } = await supabase
@@ -161,42 +152,40 @@ export const handleChat = async (req: any, res: any) => {
       if (conv) {
         convId = conv.id;
 
-        const { mistral } = require('../config/llm');
         const titleMessages = conversationTitlePrompt({ userInput });
         mistral
           .invoke(titleMessages)
-          .then(async (titleRes: any) => {
+          .then(async (titleRes: { content: unknown }) => {
             await supabase
               .from('velora_conversations')
-              .update({ title: titleRes.content.toString() })
+              .update({ title: titleRes.content?.toString() })
               .eq('id', convId);
           })
-          .catch((e: any) =>
-            logger.error('title_generation_failed', { error: e.message }),
-          );
+          .catch((e: unknown) => {
+            const msg = e instanceof Error ? e.message : String(e);
+            logger.error('title_generation_failed', { error: msg });
+          });
       }
     }
 
     if (convId) {
       logger.info('messages_inserting', { convId });
-      const { error: msgError } = await supabase
-        .from('velora_messages')
-        .insert([
-          {
-            conversation_id: convId,
-            role: 'user',
-            content: userInput,
-            fragments: [],
-          },
-          {
-            conversation_id: convId,
-            role: 'assistant',
-            content: '',
-            fragments: agentResult.fragments,
-            sql: sqlStep?.data?.sql,
-            connection_id: finalConnId,
-          },
-        ]);
+      const { error: msgError } = await supabase.from('velora_messages').insert([
+        {
+          conversation_id: convId,
+          role: 'user',
+          content: userInput,
+          fragments: [],
+        },
+        {
+          conversation_id: convId,
+          role: 'assistant',
+          content: '',
+          fragments: agentResult.fragments,
+          sql: (sqlStep?.data as { sql?: string } | null)?.sql,
+          connection_id: finalConnId,
+        },
+      ]);
       if (msgError) {
         logger.error('messages_insert_failed', { error: msgError });
       }
@@ -208,37 +197,38 @@ export const handleChat = async (req: any, res: any) => {
       convId,
       fragmentsCount: agentResult.fragments.length,
     });
-    res.status(200).json({
+    sendSuccess(res, {
       conversationId: convId,
       connectionId: finalConnId,
       fragments: agentResult.fragments,
     });
-  } catch (err: any) {
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    const stack = err instanceof Error ? err.stack : undefined;
     logger.error('chat_controller_error', {
-      error: err.message,
-      stack: err.stack,
+      error: message,
+      stack,
     });
-    res.status(500).json({ error: err.message });
+    sendError(res, 'INTERNAL_ERROR', message);
   }
 };
 
-export const handleEmailReport = async (req: any, res: any) => {
+export const handleEmailReport = async (req: Request, res: Response): Promise<void> => {
   const { logger } = req.context;
   try {
     const user = requireSessionUser(req, res);
     if (!user) return;
 
-    const { pdfBase64 } = req.body;
-    if (!pdfBase64) return res.status(400).json({ error: 'pdfBase64 is required' });
+    const { pdfBase64 } = req.body as EmailReportBody;
 
-    const { sendReportEmail } = require('../services/reportService');
     const pdfBuffer = Buffer.from(pdfBase64, 'base64');
-    
+
     await sendReportEmail(user.email, pdfBuffer);
-    
-    res.status(200).json({ success: true });
-  } catch (err: any) {
-    logger.error('handleEmailReport_error', { error: err.message });
-    res.status(500).json({ error: err.message });
+
+    sendSuccess(res, { success: true });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('handleEmailReport_error', { error: message });
+    sendError(res, 'INTERNAL_ERROR', message);
   }
 };
