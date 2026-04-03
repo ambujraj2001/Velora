@@ -2,9 +2,11 @@ import { v4 as uuidv4 } from 'uuid';
 import { redis } from '../config/db';
 import type { AnyFragment } from '../types';
 import type { AgentProgressEvent } from '../agent/types';
-import { toolLabel } from '../agent/progressLabels';
+import { formatAgentStepLabel } from '../agent/progressLabels';
 
 const JOB_KEY = (id: string) => `chat:job:${id}`;
+/** Steps with this id prefix are from chatTurnService (before LangGraph); preserved when agent plan arrives. */
+export const PIPELINE_STEP_PREFIX = 'prep:';
 const TTL_SEC = 45 * 60;
 const TTL_MS = TTL_SEC * 1000;
 
@@ -106,6 +108,23 @@ export async function setChatJobPhase(jobId: string, label: string): Promise<voi
   await writeRaw(jobId, j);
 }
 
+/** Insert or update one step by id (used for real pipeline work: connection load, history, persist, etc.). */
+export async function upsertPipelineStep(jobId: string, step: ChatJobStep): Promise<void> {
+  const j = await readRaw(jobId);
+  if (!j || j.status === 'completed' || j.status === 'failed') return;
+  if (j.status === 'queued') j.status = 'running';
+
+  const idx = j.steps.findIndex((s) => s.id === step.id);
+  if (idx >= 0) {
+    j.steps[idx] = { ...j.steps[idx], ...step };
+  } else {
+    j.steps.push(step);
+  }
+
+  j.currentLabel = step.label;
+  await writeRaw(jobId, j);
+}
+
 export async function completeChatJob(
   jobId: string,
   result: ChatJobSnapshot['result'],
@@ -133,7 +152,7 @@ function ensureStep(j: ChatJobSnapshot, stepId: string, tool: string): ChatJobSt
     s = {
       id: stepId,
       tool,
-      label: toolLabel(tool),
+      label: formatAgentStepLabel(stepId, tool),
       status: 'pending',
     };
     j.steps.push(s);
@@ -157,17 +176,23 @@ export async function applyAgentProgressToJob(
     case 'phase':
       j.currentLabel = event.label;
       break;
-    case 'plan':
-      j.steps = event.steps.map((s) => ({
+    case 'plan': {
+      const prep = j.steps.filter((s) => s.id.startsWith(PIPELINE_STEP_PREFIX));
+      const agentSteps = event.steps.map((s) => ({
         id: s.id,
         tool: s.tool,
-        label: toolLabel(s.tool),
+        label: formatAgentStepLabel(s.id, s.tool),
         status: 'pending' as ChatJobStepStatus,
       }));
-      j.currentLabel = 'Running tasks…';
+      j.steps = [...prep, ...agentSteps];
+      j.currentLabel =
+        agentSteps.length === 0
+          ? 'Agent: empty plan'
+          : `Agent graph: ${agentSteps.map((s) => `${s.id}:${s.tool}`).join(' → ')}`;
       break;
+    }
     case 'replanning':
-      j.currentLabel = 'Adjusting plan…';
+      j.currentLabel = 'LangGraph: replan (LLM replanner after step failure)';
       break;
     case 'step_start': {
       const step = ensureStep(j, event.stepId, event.tool);

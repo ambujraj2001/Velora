@@ -24,7 +24,7 @@ export default function ChatJobProgress({ job }: Props) {
   return (
     <div className="mt-4 w-full max-w-xl rounded-2xl border border-white/10 bg-[#0A0A0A]/90 px-4 py-3 text-left shadow-xl backdrop-blur-sm">
       <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-[#666]">Progress</p>
-      <p className="mt-1 text-sm text-[#ccc]">{job.currentLabel}</p>
+      <p className="mt-1 break-words text-sm text-[#ccc]">{job.currentLabel}</p>
       {job.steps.length > 0 && (
         <ul className="mt-3 max-h-40 space-y-2 overflow-y-auto text-xs text-[#888]">
           {job.steps.map((s) => (
@@ -33,7 +33,8 @@ export default function ChatJobProgress({ job }: Props) {
                 <StepIcon status={s.status} />
               </span>
               <span className={s.status === 'running' ? 'text-[#F06543]' : ''}>
-                {s.label}
+                <span className="block">{s.label}</span>
+                <span className="mt-0.5 block font-mono text-[10px] text-[#555]">{s.tool}</span>
                 {s.errorMessage ? (
                   <span className="mt-0.5 block text-[10px] text-red-400/90">{s.errorMessage}</span>
                 ) : null}

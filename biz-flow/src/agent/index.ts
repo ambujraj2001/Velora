@@ -71,7 +71,11 @@ export async function runAgent(
   context.logger.info('agent_start', { userInput });
 
   try {
-    context.onProgress?.({ kind: 'phase', label: 'Planning next steps…' });
+    const modelTag = process.env.MISTRAL_MODEL || 'mistral';
+    context.onProgress?.({
+      kind: 'phase',
+      label: `LLM: planner (${modelTag}) → build tool DAG`,
+    });
     let plan = await planner(userInput, context);
 
     const validationError = validateDependencyGraph(plan);
@@ -118,7 +122,10 @@ export async function runAgent(
     if (sqlResult) {
       finalData = sqlResult.data.rows;
       try {
-        context.onProgress?.({ kind: 'phase', label: 'Summarizing results…' });
+        context.onProgress?.({
+          kind: 'phase',
+          label: `LLM: data_summary (${modelTag}) · ${sqlResult.data.rows.length} row(s)`,
+        });
         const summaryMessages = dataSummaryPrompt({
           userInput,
           dataSampleJson: JSON.stringify(sqlResult.data.rows.slice(0, 3)),

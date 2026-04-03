@@ -7,7 +7,11 @@ import type { SessionUser } from '../utils/auth';
 import { conversationTitlePrompt } from '../prompts';
 import { selectBestConnection } from './connectionEmbeddingService';
 import { runReportFlow } from './reportService';
-import { applyAgentProgressToJob, setChatJobPhase } from './chatJobService';
+import {
+  applyAgentProgressToJob,
+  upsertPipelineStep,
+  PIPELINE_STEP_PREFIX,
+} from './chatJobService';
 import type { ChatRequestBody } from '../schemas';
 import type { ContextLogger } from '../lib/logger';
 import type { AnyFragment } from '../types';
@@ -29,11 +33,31 @@ export async function executeChatTurn(params: {
   const { body, user, traceId, requestId, logger, jobId } = params;
   const { userInput, conversationId, connectionId, mode = 'chat' } = body;
 
-  const phase = async (label: string) => {
-    if (jobId) await setChatJobPhase(jobId, label);
+  const prepId = (suffix: string) => `${PIPELINE_STEP_PREFIX}${suffix}`;
+
+  const runPipeline = async (step: {
+    suffix: string;
+    tool: string;
+    label: string;
+    status: 'pending' | 'running' | 'done' | 'error';
+  }) => {
+    if (!jobId) return;
+    await upsertPipelineStep(jobId, {
+      id: prepId(step.suffix),
+      tool: step.tool,
+      label: step.label,
+      status: step.status,
+    });
   };
 
-  await phase('Choosing data connection…');
+  await runPipeline({
+    suffix: 'connection',
+    tool: 'resolve_connection',
+    label: connectionId
+      ? `Connection: client pinned id=${connectionId}`
+      : 'Connection: embedding rank over indexed connections (no pin)',
+    status: 'running',
+  });
 
   let finalConnId = connectionId;
 
@@ -46,10 +70,14 @@ export async function executeChatTurn(params: {
     if (autoConnId) {
       finalConnId = autoConnId;
       logger.info('connection_auto_selected', { connId: finalConnId });
+      await runPipeline({
+        suffix: 'connection',
+        tool: 'resolve_connection',
+        label: `Connection: auto-selected id=${finalConnId} (embedding + rerank)`,
+        status: 'running',
+      });
     }
   }
-
-  await phase('Resolving connection…');
 
   let connSettings: AgentContext['connectionSettings'] = undefined;
   const connQuery = supabase.from('velora_connections').select('*');
@@ -95,7 +123,23 @@ export async function executeChatTurn(params: {
     logger.warn('connection_not_found', { userId: user.userId });
   }
 
-  await phase('Loading conversation…');
+  await runPipeline({
+    suffix: 'connection',
+    tool: 'resolve_connection',
+    label: conn
+      ? `Connection: loaded "${conn.name}" type=${conn.type} id=${conn.id}`
+      : 'Connection: none (agent proceeds without DB credentials)',
+    status: 'done',
+  });
+
+  await runPipeline({
+    suffix: 'history',
+    tool: 'load_messages',
+    label: conversationId
+      ? `History: loading up to 10 rows for conversation_id=${conversationId}`
+      : 'History: new thread (no conversationId)',
+    status: 'running',
+  });
 
   let history: AgentContext['history'] = [];
   if (conversationId) {
@@ -110,6 +154,13 @@ export async function executeChatTurn(params: {
     }
   }
 
+  await runPipeline({
+    suffix: 'history',
+    tool: 'load_messages',
+    label: `History: ${history.length} message(s) in context window`,
+    status: 'done',
+  });
+
   const onProgress: ((event: AgentProgressEvent) => void) | undefined = jobId
     ? (event) => {
         void applyAgentProgressToJob(jobId, event).catch((err) =>
@@ -119,8 +170,6 @@ export async function executeChatTurn(params: {
         );
       }
     : undefined;
-
-  await phase('Running agent…');
 
   const agentResult = await runAgent(userInput, {
     traceId,
@@ -140,7 +189,12 @@ export async function executeChatTurn(params: {
   });
 
   if (mode === 'report') {
-    await phase('Generating report…');
+    await runPipeline({
+      suffix: 'report',
+      tool: 'report_flow',
+      label: 'Report: runReportFlow (LLM + optional Tavily + Puppeteer PDF)',
+      status: 'running',
+    });
     const reportResult = await runReportFlow({
       query: userInput,
       userId: user.userId,
@@ -159,13 +213,25 @@ export async function executeChatTurn(params: {
     };
 
     agentResult.fragments = [reportFragment as (typeof agentResult.fragments)[number]];
+
+    await runPipeline({
+      suffix: 'report',
+      tool: 'report_flow',
+      label: `Report: done (markdown length=${reportResult.reportMarkdown.length}, pdf base64 length=${reportResult.pdfBase64.length})`,
+      status: 'done',
+    });
   }
 
   const sqlStep = agentResult.stepResults.find(
     (r) => (r.tool === 'sql_query' || r.tool === 'csv_query') && !r.error,
   );
 
-  await phase('Saving messages…');
+  await runPipeline({
+    suffix: 'persist',
+    tool: 'supabase_insert',
+    label: 'Persist: upsert velora_messages (+ create conversation if needed)',
+    status: 'running',
+  });
 
   let convId = conversationId;
   if (!convId) {
@@ -225,6 +291,15 @@ export async function executeChatTurn(params: {
   } else {
     logger.warn('messages_skipped_no_conversation');
   }
+
+  await runPipeline({
+    suffix: 'persist',
+    tool: 'supabase_insert',
+    label: convId
+      ? `Persist: wrote user+assistant rows to conversation_id=${convId}`
+      : 'Persist: skipped (no conversation id)',
+    status: 'done',
+  });
 
   logger.info('chat_response', {
     convId,
